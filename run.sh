@@ -1,0 +1,1 @@
+./debug.sh demo/demo.py     --config-file configs/BoxInst/Base-BoxInst3D.yaml     --input input1.jpg   -o output1.jpg

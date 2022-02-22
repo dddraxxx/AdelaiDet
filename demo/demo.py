@@ -12,10 +12,19 @@ from detectron2.utils.logger import setup_logger
 
 from predictor import VisualizationDemo
 from adet.config import get_cfg
+from adet.utils.volume_utils import read_niigz
+from detectron2.config import CfgNode
 
 # constants
 WINDOW_NAME = "COCO detections"
 
+
+def setup_cfg_3d(args):
+    cfg = CfgNode()
+    cfg.merge_from_file(args.config_file)
+    cfg.merge_from_list(args.opts)
+    cfg.freeze()
+    return cfg
 
 def setup_cfg(args):
     # load config from file and command-line arguments
@@ -44,7 +53,7 @@ def get_parser():
     parser.add_argument("--video-input", help="Path to video file.")
     parser.add_argument("--input", nargs="+", help="A list of space separated input images")
     parser.add_argument(
-        "--output",
+        '-o',"--output",
         help="A file or directory to save output visualizations. "
         "If not given, will show output in an OpenCV window.",
     )
@@ -70,7 +79,7 @@ if __name__ == "__main__":
     logger = setup_logger()
     logger.info("Arguments: " + str(args))
 
-    cfg = setup_cfg(args)
+    cfg = setup_cfg_3d(args)
 
     demo = VisualizationDemo(cfg)
 
@@ -82,7 +91,9 @@ if __name__ == "__main__":
             assert args.input, "The input path(s) was not found"
         for path in tqdm.tqdm(args.input, disable=not args.output):
             # use PIL, to be consistent with evaluation
-            img = read_image(path, format="BGR")
+            # img = read_image(path, format="BGR")
+            # modified
+            img = read_niigz(path)
             start_time = time.time()
             predictions, visualized_output = demo.run_on_image(img)
             logger.info(

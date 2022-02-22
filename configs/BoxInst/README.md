@@ -25,7 +25,7 @@ For training on COCO, run:
 ```
 OMP_NUM_THREADS=1 python tools/train_net.py \
     --config-file configs/BoxInst/MS_R_50_1x.yaml \
-    --num-gpus 8 \
+    --num-gpus 1 \
     OUTPUT_DIR training_dir/BoxInst_MS_R_50_1x
 ```
 

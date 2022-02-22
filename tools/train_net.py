@@ -23,7 +23,13 @@ from torch.nn.parallel import DistributedDataParallel
 
 import detectron2.utils.comm as comm
 from detectron2.data import MetadataCatalog, build_detection_train_loader
-from detectron2.engine import DefaultTrainer, default_argument_parser, default_setup, hooks, launch
+from detectron2.engine import (
+    DefaultTrainer,
+    default_argument_parser,
+    default_setup,
+    hooks,
+    launch,
+)
 from detectron2.utils.events import EventStorage
 from detectron2.evaluation import (
     COCOEvaluator,
@@ -36,6 +42,7 @@ from detectron2.evaluation import (
 )
 from detectron2.modeling import GeneralizedRCNNWithTTA
 from detectron2.utils.logger import setup_logger
+from detectron2.structures import Instances, Boxes
 
 from adet.data.dataset_mapper import DatasetMapperWithBasis
 from adet.data.fcpose_dataset_mapper import FCPoseDatasetMapper
@@ -43,12 +50,43 @@ from adet.config import get_cfg
 from adet.checkpoint import AdetCheckpointer
 from adet.evaluation import TextEvaluator
 
+from torch.utils.data import Dataset, DataLoader
+
+import monai.transforms as T
+
+from dataset_3d import get_dataset, Boxes3D
+
+class random3D(Dataset):
+    def __init__(self, length):
+        super().__init__()
+        self.length = length
+        self.data = [torch.rand(1, 250, 400, 400) for _ in range(3)]
+        self.crop = T.RandSpatialCrop(
+            (64, 64, 64), random_center=False, random_size=False
+        )
+        self.normalizer = lambda x: (x-x.mean(dim=[1,2,3],keepdim=True))/x.std(dim=[1,2,3],keepdim=True)
+
+
+    def __getitem__(self, index):
+        index = index % len(self.data)
+        x = self.data[index]
+        gt_instance = Instances((0, 0))
+        gt_boxes = Boxes3D(torch.tensor([40,60,40,60,40,60])[None])
+        gt_instance.gt_boxes = gt_boxes
+        size = dict(height=128, width=128, depth=128)
+        x = self.normalizer(self.crop(x))
+        return {"image": x, "instances": gt_instance, **size}
+
+    def __len__(self):
+        return self.length
+
 
 class Trainer(DefaultTrainer):
     """
     This is the same Trainer except that we rewrite the
     `build_train_loader`/`resume_or_load` method.
     """
+
     def build_hooks(self):
         """
         Replace `DetectionCheckpointer` with `AdetCheckpointer`.
@@ -65,11 +103,15 @@ class Trainer(DefaultTrainer):
                     optimizer=self.optimizer,
                     scheduler=self.scheduler,
                 )
-                ret[i] = hooks.PeriodicCheckpointer(self.checkpointer, self.cfg.SOLVER.CHECKPOINT_PERIOD)
+                ret[i] = hooks.PeriodicCheckpointer(
+                    self.checkpointer, self.cfg.SOLVER.CHECKPOINT_PERIOD
+                )
         return ret
-    
+
     def resume_or_load(self, resume=True):
-        checkpoint = self.checkpointer.resume_or_load(self.cfg.MODEL.WEIGHTS, resume=resume)
+        checkpoint = self.checkpointer.resume_or_load(
+            self.cfg.MODEL.WEIGHTS, resume=resume
+        )
         if resume and self.checkpointer.has_checkpoint():
             self.start_iter = checkpoint.get("iteration", -1) + 1
 
@@ -117,7 +159,9 @@ class Trainer(DefaultTrainer):
             mapper = FCPoseDatasetMapper(cfg, True)
         else:
             mapper = DatasetMapperWithBasis(cfg, True)
-        return build_detection_train_loader(cfg, mapper=mapper)
+        # return build_detection_train_loader(cfg, mapper=mapper)
+        # return DataLoader(random3D(cfg.SOLVER.MAX_ITER), 2, collate_fn=lambda x: x, shuffle=True)
+        return DataLoader(get_dataset(cfg.SOLVER.MAX_ITER), 2, collate_fn=lambda x: x, shuffle=True)
 
     @classmethod
     def build_evaluator(cls, cfg, dataset_name, output_folder=None):
@@ -184,6 +228,7 @@ def setup(args):
     Create configs and perform basic setups.
     """
     cfg = get_cfg()
+    cfg.set_new_allowed(True)
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
     cfg.freeze()
@@ -203,7 +248,7 @@ def main(args):
         AdetCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(
             cfg.MODEL.WEIGHTS, resume=args.resume
         )
-        res = Trainer.test(cfg, model) # d2 defaults.py
+        res = Trainer.test(cfg, model)  # d2 defaults.py
         if comm.is_main_process():
             verify_results(cfg, res)
         if cfg.TEST.AUG.ENABLED:
@@ -220,6 +265,7 @@ def main(args):
         trainer.register_hooks(
             [hooks.EvalHook(0, lambda: trainer.test_with_TTA(cfg, trainer.model))]
         )
+    print(trainer._trainer.model, file=open("3d_network.js", "w"))
     return trainer.train()
 
 

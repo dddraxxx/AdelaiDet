@@ -1,1 +1,1 @@
-from .condinst import CondInst
+from .condinst import CondInst3D
