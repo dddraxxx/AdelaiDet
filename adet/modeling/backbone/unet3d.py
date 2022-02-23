@@ -223,13 +223,13 @@ class MaskHead(nn.Module):
                 image_color_similarity = torch.cat(
                     [x.image_color_similarity for x in gt_instances]
                 )
-                print(mask_scores.shape, gt_bitmasks.shape)
+                # print(mask_scores.shape, gt_bitmasks.shape)
 
                 loss_prj_term = compute_project_term_3d(mask_scores, gt_bitmasks)
                 pairwise_losses = compute_pairwise_term_3d(
                     mask_logits, self.pairwise_size, self.pairwise_dilation
                 )
-                print(pairwise_losses.shape)
+                # print(pairwise_losses.shape)
 
                 weights = (
                     image_color_similarity >= self.pairwise_color_thresh
@@ -247,15 +247,17 @@ class MaskHead(nn.Module):
                         "loss_pairwise": loss_pairwise,
                     }
                 )
-                print(losses)
-                return losses
+                # print(losses)
+                return mask_scores, losses
         else:
-            results = OrderedDict(features).values()
-            for i, r in enumerate(results):
-                results[i] = self.inference_apply_nonlin(r)
-                results[i] = (results[i] > 0.5).int()
+            results = list(features.values())
+            result = self.cls_logits[0](results[0])
+            # for i, r in enumerate([result]):
+            #     results[i] = r.sigmoid
+            #     results[i] = (results[i] > 0.5).int()
+            result = (result.sigmoid()>0.5).int()
             extras = {}
-            return results[-1], extras
+            return result, extras
 
     def _proposal_loss(self, seg_output, gt_instances):
         gt_mask = gt_instances.logits_pred

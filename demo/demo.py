@@ -5,6 +5,7 @@ import multiprocessing as mp
 import os
 import time
 import cv2
+import torch
 import tqdm
 
 from detectron2.data.detection_utils import read_image
@@ -14,6 +15,8 @@ from predictor import VisualizationDemo
 from adet.config import get_cfg
 from adet.utils.volume_utils import read_niigz
 from detectron2.config import CfgNode
+
+from adet.utils.dataset_3d import read_volume, save_volume
 
 # constants
 WINDOW_NAME = "COCO detections"
@@ -29,6 +32,7 @@ def setup_cfg_3d(args):
 def setup_cfg(args):
     # load config from file and command-line arguments
     cfg = get_cfg()
+    cfg.set_new_allowed(True)
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
     # Set score_threshold for builtin models
@@ -79,7 +83,7 @@ if __name__ == "__main__":
     logger = setup_logger()
     logger.info("Arguments: " + str(args))
 
-    cfg = setup_cfg_3d(args)
+    cfg = setup_cfg(args)
 
     demo = VisualizationDemo(cfg)
 
@@ -93,27 +97,39 @@ if __name__ == "__main__":
             # use PIL, to be consistent with evaluation
             # img = read_image(path, format="BGR")
             # modified
-            img = read_niigz(path)
+            # normalizer = lambda x: (x - x.mean(dim=[1, 2, 3], keepdim=True)) / x.std(
+            #     dim=[1, 2, 3], keepdim=True
+            # )
+            img, header = read_volume(path)
+            img = img[None]
+            # img_norm = normalizer(img)
+            print('Input shape: {}'.format(img.shape))
+            st = 250
+            img = img[:,st:st+128,st:st+128,st:st+128]
+            save_volume('input1.nii.gz', img[0], header)
+            
             start_time = time.time()
-            predictions, visualized_output = demo.run_on_image(img)
+            # predictions, visualized_output = demo.run_on_image(img)
+            predictions = demo.run_on_image(img)
+            save_volume('output1.nii.gz', predictions.squeeze().cpu(), header)
             logger.info(
                 "{}: detected {} instances in {:.2f}s".format(
-                    path, len(predictions["instances"]), time.time() - start_time
+                    path, len(predictions), time.time() - start_time
                 )
             )
 
-            if args.output:
-                if os.path.isdir(args.output):
-                    assert os.path.isdir(args.output), args.output
-                    out_filename = os.path.join(args.output, os.path.basename(path))
-                else:
-                    assert len(args.input) == 1, "Please specify a directory with args.output"
-                    out_filename = args.output
-                visualized_output.save(out_filename)
-            else:
-                cv2.imshow(WINDOW_NAME, visualized_output.get_image()[:, :, ::-1])
-                if cv2.waitKey(0) == 27:
-                    break  # esc to quit
+            # if args.output:
+            #     if os.path.isdir(args.output):
+            #         assert os.path.isdir(args.output), args.output
+            #         out_filename = os.path.join(args.output, os.path.basename(path))
+            #     else:
+            #         assert len(args.input) == 1, "Please specify a directory with args.output"
+            #         out_filename = args.output
+            #     visualized_output.save(out_filename)
+            # else:
+            #     cv2.imshow(WINDOW_NAME, visualized_output.get_image()[:, :, ::-1])
+            #     if cv2.waitKey(0) == 27:
+            #         break  # esc to quit
     elif args.webcam:
         assert args.input is None, "Cannot have both --input and --webcam!"
         cam = cv2.VideoCapture(0)

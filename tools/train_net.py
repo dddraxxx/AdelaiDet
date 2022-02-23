@@ -54,7 +54,7 @@ from torch.utils.data import Dataset, DataLoader
 
 import monai.transforms as T
 
-from dataset_3d import get_dataset, Boxes3D
+from adet.utils.dataset_3d import get_dataset, Boxes3D
 
 class random3D(Dataset):
     def __init__(self, length):

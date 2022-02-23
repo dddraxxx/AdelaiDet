@@ -14,6 +14,8 @@ from scipy.ndimage import find_objects, label
 
 from detectron2.structures import Instances, Boxes
 
+dpath = "/home/hynx/kits21/data/case_000{:02d}/imaging.nii.gz"
+lpath = "/home/hynx/kits21/kits21/data/case_000{:02d}/aggregated_MAJ_seg.nii.gz"
 
 class Boxes3D(Boxes):
     def __init__(self, tensor):
@@ -117,40 +119,42 @@ class Volumes(Dataset):
         super().__init__()
         self.length = length
         self.data = [1, 2, 3, 4]
-        self.crop = T.RandSpatialCrop(
-            (128,128,128), random_center=False, random_size=False
-        )
+        self.crop_size = None# (128,)*3
+        # self.crop = T.RandSpatialCrop(
+        #     (128,128,128), random_center=False, random_size=False
+        # )
         self.normalizer = lambda x: (x - x.mean(dim=[1, 2, 3], keepdim=True)) / x.std(
             dim=[1, 2, 3], keepdim=True
         )
 
     def read_data(self, ind):
-        dpath = "/home/hynx/kits21/data/case_000{:02d}/imaging.nii.gz"
-        lpath = "/home/hynx/kits21/kits21/data/case_000{:02d}/aggregated_MAJ_seg.nii.gz"
         data = read_volume(dpath.format(ind))[0][None]
         data = torch.as_tensor(data)
         # 1 is kidney (I think)
         labels = get_label(read_volume(lpath.format(ind))[0], 1)
 
-        label = labels[0]
-        # print(label)
-        coord = pad_to(label, (128,) * 3)
-        # print(coord, data.shape)
-        if any([tuple(coord[:3]) < (0,0,0), tuple(coord[-3:]) > data.shape[-3:]]):
-            raise ValueError()
 
-        def crop(data, coord):
-            data = data[
-                ...,
-                coord[0] : coord[3],
-                coord[1] : coord[4],
-                coord[2] : coord[5],
-            ]
-            return data
-        data = crop(data, coord)
-        label[:3] = torch.max(label[:3], coord[:3])
-        label[3:] = torch.min(label[3:], coord[3:])
-        labels = label[None]
+        if self.crop_size:
+            # label = labels[0]
+            # print(label)
+            coord = pad_to(label, self.crop_size)
+            # print(coord, data.shape)
+            if any([tuple(coord[:3]) < (0,0,0), tuple(coord[-3:]) > data.shape[-3:]]):
+                raise ValueError()
+
+            def crop(data, coord):
+                data = data[
+                    ...,
+                    coord[0] : coord[3],
+                    coord[1] : coord[4],
+                    coord[2] : coord[5],
+                ]
+                return data
+            data = crop(data, coord)
+            label[:3] = torch.max(label[:3], coord[:3])
+            label[3:] = torch.min(label[3:], coord[3:])
+        
+            labels = label[None]
         # print(label)
 
         return data, labels
@@ -164,7 +168,7 @@ class Volumes(Dataset):
         gt_instance.gt_boxes = gt_boxes
 
         # size = dict(height=128, width=128, depth=128)
-        x = self.normalizer(self.crop(x)).float()
+        # x = self.normalizer(self.crop(x)).float()
         return {"image": x, "instances": gt_instance}
 
     def __len__(self):
@@ -172,7 +176,7 @@ class Volumes(Dataset):
 
 
 def demo_plot():
-    lpath = ["/home/hynx/kits21/kits21/data/case_00020/aggregated_MAJ_seg.nii.gz"]
+    path = ["/home/hynx/kits21/kits21/data/case_00020/aggregated_MAJ_seg.nii.gz"]
 
     data, header = read_volume(path)
 
@@ -195,7 +199,19 @@ def demo_plot():
     ax.scatter3D(x, y, z, c=data[x, y, z].ravel())
     plt.savefig("demo.jpg")
 
+def only_get_label(ind):
+    labels = get_label(read_volume(lpath.format(ind))[0], 1)
+    return labels
+
 if __name__ == '__main__':
-    d = Volumes(100)
-    for i in range(4):
-        print(d[i])
+    all_l = []
+    for i in range(5,6):
+        labels = only_get_label(i)
+        on_diff_side =  labels[0,0]<256
+        if not on_diff_side:
+            print(labels)
+        all_l.append(labels)
+    print(len(all_l))
+    # d = Volumes(100)
+    # for i in range(4):
+    #     print(d[i]['image'].shape)

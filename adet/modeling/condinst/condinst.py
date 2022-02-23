@@ -167,7 +167,7 @@ class CondInst3D(nn.Module):
 
         # mask_feats, sem_losses = self.mask_branch(features, gt_instances)
 
-        proposal_losses = self.proposal_generator(
+        proposal, proposal_losses = self.proposal_generator(
             images_norm, features, gt_instances # , self.controller
         )
 
@@ -181,25 +181,25 @@ class CondInst3D(nn.Module):
             losses.update(proposal_losses)
             return losses
         else:
-            pred_instances_w_masks = self._forward_mask_heads_test(proposals, mask_feats)
+            # pred_instances_w_masks = self._forward_mask_heads_test(proposals, mask_feats)
 
-            padded_im_h, padded_im_w = images_norm.tensor.size()[-2:]
-            processed_results = []
-            for im_id, (input_per_image, image_size) in enumerate(zip(batched_inputs, images_norm.image_sizes)):
-                height = input_per_image.get("height", image_size[0])
-                width = input_per_image.get("width", image_size[1])
+            # padded_im_h, padded_im_w = images_norm.tensor.size()[-2:]
+            # processed_results = []
+            # for im_id, (input_per_image, image_size) in enumerate(zip(batched_inputs, images_norm.image_sizes)):
+            #     height = input_per_image.get("height", image_size[0])
+            #     width = input_per_image.get("width", image_size[1])
 
-                instances_per_im = pred_instances_w_masks[pred_instances_w_masks.im_inds == im_id]
-                instances_per_im = self.postprocess(
-                    instances_per_im, height, width,
-                    padded_im_h, padded_im_w
-                )
+            #     instances_per_im = pred_instances_w_masks[pred_instances_w_masks.im_inds == im_id]
+            #     instances_per_im = self.postprocess(
+            #         instances_per_im, height, width,
+            #         padded_im_h, padded_im_w
+            #     )
 
-                processed_results.append({
-                    "instances": instances_per_im
-                })
+            #     processed_results.append({
+            #         "instances": instances_per_im
+            #     })
 
-            return processed_results
+            return proposal
 
     def _forward_mask_heads_train(self, proposals, mask_feats, gt_instances):
         # prepare the inputs for mask heads
