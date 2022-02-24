@@ -38,10 +38,10 @@ def unfold_wo_center_3d(x, kernel_size, dilation):
     padding = (kernel_size + (dilation - 1) * (kernel_size - 1)) // 2
     pad_x = F.pad(x, (padding, padding)*3
         )
-    x_st, y_st, z_st = torch.meshgrid(*[torch.arange(0, dilation*(kernel_size-1)+1, dilation)]*3)
+    x_st, y_st, z_st = torch.meshgrid(*[torch.arange(0, dilation*(kernel_size-1)+1, dilation)]*3, indexing='ij')
     grid_x, grid_y, grid_z = torch.meshgrid(*[
         torch.arange(0, l) for l in [S,H,W]
-    ])
+    ], indexing='ij')
     grid_x = grid_x[..., None,None,None] + x_st
     grid_y = grid_y[..., None,None,None] + y_st
     grid_z = grid_z[..., None,None,None] + z_st
@@ -328,7 +328,7 @@ class CondInst3D(nn.Module):
             per_im_bitmasks_full = []
             for per_box in per_im_boxes:
                 bitmask_full = torch.zeros((im_s, im_h, im_w)).to(self.device).float()
-                bitmask_full[int(per_box[0]):int(per_box[2] + 1),int(per_box[1]):int(per_box[3] + 1), int(per_box[2]):int(per_box[4 + 1])] = 1.0
+                bitmask_full[int(per_box[0]):int(per_box[3] + 1),int(per_box[1]):int(per_box[4] + 1), int(per_box[2]):int(per_box[5] + 1)] = 1.0
 
                 bitmask = bitmask_full[start::stride, start::stride]
 

@@ -214,7 +214,7 @@ class MaskHead(nn.Module):
 
             self._iter += 1
             gt_bitmasks = torch.cat([per_im.gt_bitmasks for per_im in gt_instances])[:,None]
-
+# gt_bitmasks[0,0,60]
             mask_logits = seg_output
             mask_scores = mask_logits.sigmoid()
 

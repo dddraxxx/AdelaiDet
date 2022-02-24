@@ -1,3 +1,4 @@
+from functools import reduce
 import numpy as np
 
 from pathlib import Path as pa
@@ -8,6 +9,7 @@ import SimpleITK as sitk
 
 import torch
 from torch.utils.data import Dataset
+import torch.nn.functional as F
 
 from itertools import product
 from scipy.ndimage import find_objects, label
@@ -16,6 +18,14 @@ from detectron2.structures import Instances, Boxes
 
 dpath = "/home/hynx/kits21/data/case_000{:02d}/imaging.nii.gz"
 lpath = "/home/hynx/kits21/kits21/data/case_000{:02d}/aggregated_MAJ_seg.nii.gz"
+
+
+def fd(a, b):
+    return torch.div(a, b, rounding_mode="floor")
+
+
+torch.Tensor.__floordiv__ = fd
+
 
 class Boxes3D(Boxes):
     def __init__(self, tensor):
@@ -95,7 +105,7 @@ def get_label(data, label_no=1):
     # filter small segments
     for inst in ls:
         for sl in inst:
-            if sl.stop - sl.start < 5:
+            if sl.stop - sl.start < 20:
                 rmd.append(inst)
                 break
     for r in rmd:
@@ -111,15 +121,18 @@ def get_dataset(length):
 
 
 def pad_to(coord, size):
-    ctr = (coord[:3] + coord[3:])//2
-    return torch.cat([ctr-64,ctr+64])
+    ctr = (coord[:3] + coord[3:]) // 2
+    size = torch.tensor(size)
+    return torch.cat([ctr - size // 2, ctr + size // 2])
+
 
 class Volumes(Dataset):
     def __init__(self, length):
         super().__init__()
         self.length = length
-        self.data = [1, 2, 3, 4]
-        self.crop_size = None# (128,)*3
+        # 10 samples total
+        self.data = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+        self.crop_size = (128,) * 3
         # self.crop = T.RandSpatialCrop(
         #     (128,128,128), random_center=False, random_size=False
         # )
@@ -129,18 +142,38 @@ class Volumes(Dataset):
 
     def read_data(self, ind):
         data = read_volume(dpath.format(ind))[0][None]
+        # print(ind)
         data = torch.as_tensor(data)
         # 1 is kidney (I think)
         labels = get_label(read_volume(lpath.format(ind))[0], 1)
 
-
         if self.crop_size:
-            # label = labels[0]
+            # print(labels)
+            # padding data
+            if any(i < j for i, j in zip(data.shape[-3:], self.crop_size)):
+                s, h, w = data.shape[-3:]
+                cs = self.crop_size
+                f = lambda x: (x // 2, x // 2 + x % 2) if x>0 else (0,0)
+                pads = [f(i) for i in (cs[2] - w, cs[1] - h, cs[0] - s)]
+                pads = reduce(lambda x, y: x + y, pads)
+                # print("padding data:{} for shape {}".format(pads, data.shape[-3:]))
+                data = F.pad(data, pads)
+                labels = labels + torch.tensor(pads)[::2].flip(-1).repeat(2)
+
+            label = labels[0]
             # print(label)
             coord = pad_to(label, self.crop_size)
             # print(coord, data.shape)
-            if any([tuple(coord[:3]) < (0,0,0), tuple(coord[-3:]) > data.shape[-3:]]):
-                raise ValueError()
+            coord = coord.view(2, 3).T
+            for i in range(3):
+                if coord[i][0] < 0:
+                    coord[i] = coord[i] - coord[i][0]
+                if coord[i][1] > data.shape[-3:][i]:
+                    coord[i] = coord[i] - (coord[i][1] - data.shape[-3:][i])
+            coord = coord.T.view(-1)
+
+            # print("data index:{}".format(ind))
+            # print("crop coodinate:{}".format(coord))
 
             def crop(data, coord):
                 data = data[
@@ -150,23 +183,29 @@ class Volumes(Dataset):
                     coord[2] : coord[5],
                 ]
                 return data
+
             data = crop(data, coord)
-            label[:3] = torch.max(label[:3], coord[:3])
-            label[3:] = torch.min(label[3:], coord[3:])
-        
+            assert data.shape[-3:] == (128, 128, 128)
+
+            label[:3] = torch.maximum(label[:3] - coord[:3], torch.zeros(3))
+            label[3:] = torch.minimum(label[3:] - coord[:3], coord[3:] - coord[:3])
+
             labels = label[None]
         # print(label)
 
-        return data, labels
+        return data.float(), labels.float()
 
     def __getitem__(self, index):
-        index = index % len(self.data)
+        index = self.data[index % len(self.data)]
         x, labels = self.read_data(index)
         # print(x.shape, labels)
         gt_instance = Instances((0, 0))
         gt_boxes = Boxes3D(labels)
         gt_instance.gt_boxes = gt_boxes
 
+        x = self.normalizer(x)
+
+        # print(x.shape)
         # size = dict(height=128, width=128, depth=128)
         # x = self.normalizer(self.crop(x)).float()
         return {"image": x, "instances": gt_instance}
@@ -199,19 +238,22 @@ def demo_plot():
     ax.scatter3D(x, y, z, c=data[x, y, z].ravel())
     plt.savefig("demo.jpg")
 
+
 def only_get_label(ind):
     labels = get_label(read_volume(lpath.format(ind))[0], 1)
     return labels
 
-if __name__ == '__main__':
-    all_l = []
-    for i in range(5,6):
-        labels = only_get_label(i)
-        on_diff_side =  labels[0,0]<256
-        if not on_diff_side:
-            print(labels)
-        all_l.append(labels)
-    print(len(all_l))
-    # d = Volumes(100)
-    # for i in range(4):
-    #     print(d[i]['image'].shape)
+
+if __name__ == "__main__":
+    # all_l = []
+    # for i in range(5,6):
+    #     labels = only_get_label(i)
+    #     on_diff_side =  labels[0,0]<256
+    #     if not on_diff_side:
+    #         print(labels)
+    #     all_l.append(labels)
+    # print(len(all_l))
+    d = Volumes(100)
+    for i in range(4, 10):
+        print(d[i]["image"].shape)
+        print(d[i]["image"].min(),d[i]["image"].max())

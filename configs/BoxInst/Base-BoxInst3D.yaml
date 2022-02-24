@@ -1,5 +1,7 @@
 VERSION: 2
 MODEL:
+  # WEIGHTS: "training_dir/BoxInst/Base-BoxInst3D/model_0009999.pth"
+  # WEIGHTS: "training_dir/BoxInst/Base-BoxInst3D_2/model_0000029.pth"
   META_ARCHITECTURE: "CondInst3D"
   MASK_ON: True
   PIXEL_MEAN: [None]
@@ -33,10 +35,18 @@ DATASETS:
   TRAIN: ("coco_2017_train",)
   TEST: ("coco_2017_val",)
 SOLVER:
+  GAMMA: 0.1
   IMS_PER_BATCH: 1
   BASE_LR: 0.01
-  STEPS: (60000, 80000)
-  MAX_ITER: 90000
+  STEPS: (250, 280)
+  WARMUP_FACTOR: 0.001
+  WARMUP_ITERS: 50
+  WARMUP_METHOD: 'linear'
+  WEIGHT_DECAY: 0.0001
+  WEIGHT_DECAY_BIAS: None
+  WEIGHT_DECAY_NORM: 0.0
+  MAX_ITER: 300
+  CHECKPOINT_PERIOD: 5
 INPUT:
   MIN_SIZE_TRAIN: (640, 672, 704, 736, 768, 800)
   FORMAT: BGR

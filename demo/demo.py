@@ -104,8 +104,9 @@ if __name__ == "__main__":
             img = img[None]
             # img_norm = normalizer(img)
             print('Input shape: {}'.format(img.shape))
-            st = 250
-            img = img[:,st:st+128,st:st+128,st:st+128]
+            st = torch.tensor([110,255,182])
+            end = st+128
+            img = img[:, st[0]:end[0],st[1]:end[1],st[2]:end[2]]
             save_volume('input1.nii.gz', img[0], header)
             
             start_time = time.time()

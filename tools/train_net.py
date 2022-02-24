@@ -129,6 +129,7 @@ class Trainer(DefaultTrainer):
         with EventStorage(start_iter) as self.storage:
             self.before_train()
             for self.iter in range(start_iter, max_iter):
+                print('iter: {}'.format(self.iter))
                 self.before_step()
                 self.run_step()
                 self.after_step()
@@ -161,7 +162,7 @@ class Trainer(DefaultTrainer):
             mapper = DatasetMapperWithBasis(cfg, True)
         # return build_detection_train_loader(cfg, mapper=mapper)
         # return DataLoader(random3D(cfg.SOLVER.MAX_ITER), 2, collate_fn=lambda x: x, shuffle=True)
-        return DataLoader(get_dataset(cfg.SOLVER.MAX_ITER), 2, collate_fn=lambda x: x, shuffle=True)
+        return DataLoader(get_dataset(cfg.SOLVER.MAX_ITER), 2, collate_fn=lambda x: x, shuffle=True, pin_memory=True,   num_workers=4)
 
     @classmethod
     def build_evaluator(cls, cfg, dataset_name, output_folder=None):
