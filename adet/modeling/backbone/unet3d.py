@@ -283,7 +283,7 @@ def compute_pairwise_term_3d(mask_logits, pairwise_size, pairwise_dilation):
     log_fg_prob = F.logsigmoid(mask_logits)
     log_bg_prob = F.logsigmoid(-mask_logits)
 
-    from adet.modeling.condinst.condinst import unfold_wo_center_3d
+    from adet.modeling.condinst.condinst3d import unfold_wo_center_3d
     log_fg_prob_unfold = unfold_wo_center_3d(
         log_fg_prob, kernel_size=pairwise_size,
         dilation=pairwise_dilation

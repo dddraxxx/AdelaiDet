@@ -80,6 +80,24 @@ class random3D(Dataset):
     def __len__(self):
         return self.length
 
+class random2D(Dataset):
+    def __init__(self, length):
+        super().__init__()
+        self.length = length
+        self.data = [torch.rand(3, 100, 100) for _ in range(3)]
+
+    def __getitem__(self, index):
+        index = index % len(self.data)
+        x = self.data[index]
+        gt_instance = Instances((0, 0))
+        gt_boxes = Boxes(torch.tensor(([40,60,60,80],[10, 15, 20, 30])))
+        gt_instance.gt_boxes = gt_boxes
+        gt_instance.gt_classes=torch.tensor([2,1])
+        size = dict(height=128, width=128)
+        return {"image": x, "instances": gt_instance, **size}
+
+    def __len__(self):
+        return self.length
 
 class Trainer(DefaultTrainer):
     """
@@ -161,8 +179,9 @@ class Trainer(DefaultTrainer):
         else:
             mapper = DatasetMapperWithBasis(cfg, True)
         # return build_detection_train_loader(cfg, mapper=mapper)
-        # return DataLoader(random3D(cfg.SOLVER.MAX_ITER), 2, collate_fn=lambda x: x, shuffle=True)
-        return DataLoader(get_dataset(cfg.SOLVER.MAX_ITER), 2, collate_fn=lambda x: x, shuffle=True, pin_memory=True,   num_workers=4)
+        # return DataLoader(random3D(cfg.SOLVER.MAX_ITER), 1, collate_fn=lambda x: x, shuffle=True)
+        # return DataLoader(random2D(cfg.SOLVER.MAX_ITER), 2, collate_fn=lambda x: x, shuffle=True)
+        return DataLoader(get_dataset(cfg.SOLVER.MAX_ITER), cfg.SOLVER.IMS_PER_BATCH, collate_fn=lambda x: x, shuffle=True, pin_memory=True,   num_workers=4)
 
     @classmethod
     def build_evaluator(cls, cfg, dataset_name, output_folder=None):

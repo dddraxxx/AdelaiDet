@@ -140,6 +140,7 @@ class Volumes(Dataset):
             dim=[1, 2, 3], keepdim=True
         )
 
+
     def read_data(self, ind):
         data = read_volume(dpath.format(ind))[0][None]
         # print(ind)
@@ -254,6 +255,6 @@ if __name__ == "__main__":
     #     all_l.append(labels)
     # print(len(all_l))
     d = Volumes(100)
-    for i in range(4, 10):
+    for i in range(1, 10):
         print(d[i]["image"].shape)
         print(d[i]["image"].min(),d[i]["image"].max())

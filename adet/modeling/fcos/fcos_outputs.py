@@ -458,19 +458,17 @@ class FCOSOutputs(nn.Module):
             self, locations, logits_pred, reg_pred,
             ctrness_pred, image_sizes, top_feat=None
     ):
-        N, C, S, H, W = logits_pred.shape
+        N, C, H, W = logits_pred.shape
 
         # put in the same format as locations
-        # logits_pred = logits_pred.view(N, C, H, W).permute(0, 2, 3, 1)
-        # logits_pred = logits_pred.reshape(N, -1, C).sigmoid()
-        # box_regression = reg_pred.view(N, 4, H, W).permute(0, 2, 3, 1)
-        # box_regression = box_regression.reshape(N, -1, 4)
-        # ctrness_pred = ctrness_pred.view(N, 1, H, W).permute(0, 2, 3, 1)
-        # ctrness_pred = ctrness_pred.reshape(N, -1).sigmoid()
-        logits_pred = logits_pred.view(N, C, -1).permute(0,2,1).sigmoid()
-        box_regression = reg_pred.view(N, 8, -1).permute(0,2,1)
+        logits_pred = logits_pred.view(N, C, H, W).permute(0, 2, 3, 1)
+        logits_pred = logits_pred.reshape(N, -1, C).sigmoid()
+        box_regression = reg_pred.view(N, 4, H, W).permute(0, 2, 3, 1)
+        box_regression = box_regression.reshape(N, -1, 4)
+        ctrness_pred = ctrness_pred.view(N, 1, H, W).permute(0, 2, 3, 1)
+        ctrness_pred = ctrness_pred.reshape(N, -1).sigmoid()
         if top_feat is not None:
-            top_feat = top_feat.view(N, -1, S, H, W).permute(0, 2, 3, 4, 1)
+            top_feat = top_feat.view(N, -1, H, W).permute(0, 2, 3, 1)
             top_feat = top_feat.reshape(N, H * W, -1)
 
         # if self.thresh_with_ctr is True, we multiply the classification

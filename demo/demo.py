@@ -16,7 +16,7 @@ from adet.config import get_cfg
 from adet.utils.volume_utils import read_niigz
 from detectron2.config import CfgNode
 
-from adet.utils.dataset_3d import read_volume, save_volume
+from adet.utils.dataset_3d import Volumes, read_volume, save_volume
 
 # constants
 WINDOW_NAME = "COCO detections"
@@ -97,17 +97,24 @@ if __name__ == "__main__":
             # use PIL, to be consistent with evaluation
             # img = read_image(path, format="BGR")
             # modified
-            # normalizer = lambda x: (x - x.mean(dim=[1, 2, 3], keepdim=True)) / x.std(
-            #     dim=[1, 2, 3], keepdim=True
-            # )
+            normalizer = lambda x: (x - x.mean(dim=[1, 2, 3], keepdim=True)) / x.std(
+                dim=[1, 2, 3], keepdim=True
+            )
+            # ds = Volumes(1)
+            # ds[path]
             img, header = read_volume(path)
-            img = img[None]
-            # img_norm = normalizer(img)
+            img = torch.from_numpy(img[None])
+
+            # normalize
             print('Input shape: {}'.format(img.shape))
-            st = torch.tensor([110,255,182])
+            st = torch.tensor([76, 212, 226])
             end = st+128
             img = img[:, st[0]:end[0],st[1]:end[1],st[2]:end[2]]
+            
             save_volume('input1.nii.gz', img[0], header)
+            img = normalizer(img)
+            img = img.numpy()
+            
             
             start_time = time.time()
             # predictions, visualized_output = demo.run_on_image(img)

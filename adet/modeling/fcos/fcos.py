@@ -154,7 +154,7 @@ class FCOSHead(nn.Module):
                 if use_deformable and i == num_convs - 1:
                     conv_func = DFConv2d
                 else:
-                    conv_func = nn.Conv3d
+                    conv_func = nn.Conv2d
                 tower.append(conv_func(
                     in_channels, in_channels,
                     kernel_size=3, stride=1,
@@ -166,7 +166,7 @@ class FCOSHead(nn.Module):
                     tower.append(NaiveGroupNorm(32, in_channels))
                 elif norm == "BN":
                     tower.append(ModuleListDial([
-                        nn.BatchNorm3d(in_channels) for _ in range(self.num_levels)
+                        nn.BatchNorm2d(in_channels) for _ in range(self.num_levels)
                     ]))
                 elif norm == "SyncBN":
                     tower.append(ModuleListDial([
@@ -176,19 +176,19 @@ class FCOSHead(nn.Module):
             self.add_module('{}_tower'.format(head),
                             nn.Sequential(*tower))
 
-        self.cls_logits = nn.Conv3d(
+        self.cls_logits = nn.Conv2d(
             in_channels, self.num_classes,
             kernel_size=3, stride=1,
             padding=1
         )
-        self.bbox_pred = nn.Conv3d(
-            in_channels, 8, kernel_size=3,
+        self.bbox_pred = nn.Conv2d(
+            in_channels, 4, kernel_size=3,
             stride=1, padding=1
         )
-        # self.ctrness = nn.Conv3d(
-        #     in_channels, 1, kernel_size=3,
-        #     stride=1, padding=1
-        # )
+        self.ctrness = nn.Conv2d(
+            in_channels, 1, kernel_size=3,
+            stride=1, padding=1
+        )
 
         if cfg.MODEL.FCOS.USE_SCALE:
             self.scales = nn.ModuleList([Scale(init_value=1.0) for _ in range(self.num_levels)])
@@ -197,19 +197,18 @@ class FCOSHead(nn.Module):
 
         for modules in [
             self.cls_tower, self.bbox_tower,
-            # self.share_tower, 
-            self.cls_logits,
-            self.bbox_pred, #self.ctrness
+            self.share_tower, self.cls_logits,
+            self.bbox_pred, self.ctrness
         ]:
             for l in modules.modules():
-                if isinstance(l, ( nn.Conv3d, nn.Conv2d )):
+                if isinstance(l, nn.Conv2d):
                     torch.nn.init.normal_(l.weight, std=0.01)
                     torch.nn.init.constant_(l.bias, 0)
 
         # initialize the bias for focal loss
-        # prior_prob = cfg.MODEL.FCOS.PRIOR_PROB
-        # bias_value = -math.log((1 - prior_prob) / prior_prob)
-        # torch.nn.init.constant_(self.cls_logits.bias, bias_value)
+        prior_prob = cfg.MODEL.FCOS.PRIOR_PROB
+        bias_value = -math.log((1 - prior_prob) / prior_prob)
+        torch.nn.init.constant_(self.cls_logits.bias, bias_value)
 
     def forward(self, x, top_module=None, yield_bbox_towers=False):
         logits = []

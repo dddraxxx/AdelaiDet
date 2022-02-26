@@ -8,9 +8,9 @@ import torch
 
 def save_img(path, width=5, inter_dst=10, save_name=None):
     img, _ = read_volume(path)
-    st = torch.tensor([110,255,182])
+    st = torch.tensor([76, 212, 226])
     end = st+128
-    # img = img[st[0]:end[0],st[1]:end[1],st[2]:end[2]]
+    img = img[st[0]:end[0],st[1]:end[1],st[2]:end[2]]
     img = torch.from_numpy(img).float()
     img = img[::inter_dst, None]
     print(img.shape, img.dtype)
@@ -21,7 +21,7 @@ def save_img(path, width=5, inter_dst=10, save_name=None):
 
 
 if __name__ == "__main__":
-    save_img("/home/hynx/AdelaiDet/input1.nii.gz")
-    save_img("/home/hynx/AdelaiDet/output1.nii.gz")
-    # save_img(lpath.format(1), save_name="label_cropped.png")
+    # save_img("/home/hynx/AdelaiDet/input1.nii.gz")
+    # save_img("/home/hynx/AdelaiDet/output1.nii.gz")
+    save_img(lpath.format(1), save_name="label_cropped.png")
     # save_img(dpath.format(5), save_name="data5.png")

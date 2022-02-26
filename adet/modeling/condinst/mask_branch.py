@@ -1,11 +1,8 @@
 from typing import Dict
 import math
 
-import monai.transforms as T
-
 import torch
 from torch import nn
-import torch.nn.functional as F
 
 from fvcore.nn import sigmoid_focal_loss_jit
 from detectron2.layers import ShapeSpec
@@ -24,7 +21,7 @@ def build_mask_branch(cfg, input_shape):
 class MaskBranch(nn.Module):
     def __init__(self, cfg, input_shape: Dict[str, ShapeSpec]):
         super().__init__()
-        self.in_features = cfg.MODEL.UNET3D.OUT_FEATURES
+        self.in_features = cfg.MODEL.CONDINST.MASK_BRANCH.IN_FEATURES
         self.sem_loss_on = cfg.MODEL.CONDINST.MASK_BRANCH.SEMANTIC_LOSS_ON
         self.num_outputs = cfg.MODEL.CONDINST.MASK_BRANCH.OUT_CHANNELS
         norm = cfg.MODEL.CONDINST.MASK_BRANCH.NORM
@@ -34,26 +31,7 @@ class MaskBranch(nn.Module):
 
         feature_channels = {k: v.channels for k, v in input_shape.items()}
 
-        # modified
-        # conv_block = conv_with_kaiming_uniform(norm, activation=True)
-        def conv_block(in_channels, out_channels, kernel_size, stride=1, dilation=1, groups=1):  
-            conv = nn.Conv3d(
-                in_channels,
-                out_channels,
-                kernel_size=kernel_size,
-                stride=stride,
-                padding=dilation * (kernel_size - 1) // 2,
-                dilation=dilation,
-                groups=groups,
-                bias=False
-            )
-            # Caffe2 implementation uses XavierFill, which in fact
-            # corresponds to kaiming_uniform_ in PyTorch
-            nn.init.kaiming_uniform_(conv.weight, a=1)
-            norm = nn.BatchNorm3d(out_channels)
-            activation = nn.ReLU(inplace=True)
-            return nn.Sequential(conv, norm, activation)
-        
+        conv_block = conv_with_kaiming_uniform(norm, activation=True)
 
         self.refine = nn.ModuleList()
         for in_feature in self.in_features:
@@ -67,7 +45,7 @@ class MaskBranch(nn.Module):
             tower.append(conv_block(
                 channels, channels, 3, 1
             ))
-        tower.append(nn.Conv3d(
+        tower.append(nn.Conv2d(
             channels, max(self.num_outputs, 1), 1
         ))
         self.add_module('tower', nn.Sequential(*tower))
@@ -96,17 +74,13 @@ class MaskBranch(nn.Module):
             else:
                 x_p = self.refine[i](features[f])
 
-                target_s, target_h, target_w = x.size()[2:]
-                s, h, w = x_p.size()[2:]
+                target_h, target_w = x.size()[2:]
+                h, w = x_p.size()[2:]
                 assert target_h % h == 0
                 assert target_w % w == 0
-                assert target_s % s == 0
-                factor_s, factor_h, factor_w = target_s//s, target_h // h, target_w // w
-                assert factor_h == factor_w == factor_s
-                # modified
-                # x_p = aligned_bilinear(x_p, factor_h)
-                x_p = F.interpolate(x_p, scale_factor=factor_h, mode='trilinear')
-                # print(x_p.shape)
+                factor_h, factor_w = target_h // h, target_w // w
+                assert factor_h == factor_w
+                x_p = aligned_bilinear(x_p, factor_h)
                 x = x + x_p
 
         mask_feats = self.tower(x)

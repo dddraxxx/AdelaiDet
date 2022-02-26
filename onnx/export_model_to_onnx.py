@@ -24,6 +24,8 @@ from torch import nn
 from torch.nn import functional as F
 from copy import deepcopy
 
+from adet.modeling.condinst import condinst3d
+
 # multiple versions of Adet/FCOS are installed, remove the conflict ones from the path
 try:
     from remove_python_path import remove_path
@@ -40,7 +42,7 @@ from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.modeling import ProposalNetwork
 
 from adet.config import get_cfg
-from adet.modeling import FCOS, BlendMask, BAText, MEInst, condinst, SOLOv2
+from adet.modeling import FCOS, BlendMask, BAText, MEInst, SOLOv2
 from adet.modeling.condinst.mask_branch import MaskBranch
 
 def patch_condinst(cfg, model, output_names):
@@ -264,7 +266,7 @@ def main():
     input_names = ["input_image"]
     dummy_input = torch.zeros((1, 3, height, width)).to(cfg.MODEL.DEVICE)
     output_names = []
-    if isinstance(model, condinst.CondInst):
+    if isinstance(model, condinst3d.CondInst):
         patch_condinst(cfg, model, output_names)
 
     if isinstance(model, BlendMask):

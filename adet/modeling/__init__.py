@@ -6,7 +6,7 @@ from .one_stage_detector import OneStageDetector, OneStageRCNN
 from .roi_heads.text_head import TextHead
 from .batext import BAText
 from .MEInst import MEInst
-from .condinst import condinst
+from .condinst import condinst3d
 from .solov2 import SOLOv2
 from .fcpose import FCPose
 
