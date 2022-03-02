@@ -16,7 +16,8 @@ from scipy.ndimage import find_objects, label
 
 from detectron2.structures import Instances, Boxes
 
-dpath = "/home/hynx/kits21/data/case_000{:02d}/imaging.nii.gz"
+
+dpath = "/mnt/sdc/kits21/data/case_000{:02d}/imaging.nii.gz"
 lpath = "/home/hynx/kits21/kits21/data/case_000{:02d}/aggregated_MAJ_seg.nii.gz"
 
 
@@ -48,6 +49,29 @@ class Boxes3D(Boxes):
     def to(self, device: torch.device):
         # Boxes are assumed float32 and does not support to(dtype)
         return Boxes3D(self.tensor.to(device=device))
+
+    def area(self) -> torch.Tensor:
+        """
+        Computes the area of all the boxes.
+
+        Returns:
+            torch.Tensor: a vector with areas of each box.
+        """
+        box = self.tensor
+        area = (
+            (box[:, 3] - box[:, 0]) * (box[:, 4] - box[:, 1]) * (box[:, 5] - box[:, 2])
+        )
+        return area
+
+
+def read_header(path):
+    image = sitk.ReadImage(path)
+    header = {
+        "spacing": image.GetSpacing(),
+        "origin": image.GetOrigin(),
+        "direction": image.GetDirection(),
+    }
+    return header
 
 
 def read_volume(path):
@@ -139,22 +163,34 @@ class Volumes(Dataset):
         self.normalizer = lambda x: (x - x.mean(dim=[1, 2, 3], keepdim=True)) / x.std(
             dim=[1, 2, 3], keepdim=True
         )
+        # self.header = read_header(dpath.format(self.data[0]))
+        self.header = {'spacing': (0.5, 0.919921875, 0.919921875), 'origin': (0.0, 0.0, 0.0), 'direction': (-0.0, 0.0, 1.0, 0.0, 1.0, 0.0, -1.0, 0.0, 0.0)}
 
-
-    def read_data(self, ind):
+    def read_data(self, ind, read_gt=False):
+        """
+        Normalize + crop...
+        data: 1*S*H*W
+        label: 1*6"""
         data = read_volume(dpath.format(ind))[0][None]
         # print(ind)
         data = torch.as_tensor(data)
+        data = self.normalizer(data)
         # 1 is kidney (I think)
         labels = get_label(read_volume(lpath.format(ind))[0], 1)
+        if read_gt:
+            gt = torch.as_tensor(read_volume(lpath.format(ind))[0][None])
+            data = torch.cat([data, gt], dim=0)
+
+        # Try to make data smaller to
 
         if self.crop_size:
+            print('crop data')
             # print(labels)
             # padding data
             if any(i < j for i, j in zip(data.shape[-3:], self.crop_size)):
                 s, h, w = data.shape[-3:]
                 cs = self.crop_size
-                f = lambda x: (x // 2, x // 2 + x % 2) if x>0 else (0,0)
+                f = lambda x: (x // 2, x // 2 + x % 2) if x > 0 else (0, 0)
                 pads = [f(i) for i in (cs[2] - w, cs[1] - h, cs[0] - s)]
                 pads = reduce(lambda x, y: x + y, pads)
                 # print("padding data:{} for shape {}".format(pads, data.shape[-3:]))
@@ -203,8 +239,7 @@ class Volumes(Dataset):
         gt_instance = Instances((0, 0))
         gt_boxes = Boxes3D(labels)
         gt_instance.gt_boxes = gt_boxes
-
-        x = self.normalizer(x)
+        gt_instance.gt_classes = torch.ones(1)
 
         # print(x.shape)
         # size = dict(height=128, width=128, depth=128)
@@ -215,17 +250,10 @@ class Volumes(Dataset):
         return self.length
 
 
-def demo_plot():
-    path = ["/home/hynx/kits21/kits21/data/case_00020/aggregated_MAJ_seg.nii.gz"]
-
-    data, header = read_volume(path)
-
-    data = (data == 1).astype(int)
-
-    ldata, n = label(data, np.ones((3, 3, 3)))
-    ls = find_objects(ldata)
-    mis = [[i.start for i in sl] for sl in ls]
-    mxs = [[i.stop for i in sl] for sl in ls]
+def demo_plot(data, label):
+    label = torch.min(label, torch.ones_like(label) * torch.tensor(data.shape))
+    mis = label[:, :3].int().tolist()
+    mxs = label[:, 3:].int().tolist()
 
     for mx, mi in zip(mxs, mis):
         draw_edge(data, mx, mi)
@@ -254,7 +282,23 @@ if __name__ == "__main__":
     #         print(labels)
     #     all_l.append(labels)
     # print(len(all_l))
-    d = Volumes(100)
-    for i in range(1, 10):
-        print(d[i]["image"].shape)
-        print(d[i]["image"].min(),d[i]["image"].max())
+    d = Volumes(10)
+    print('start')
+
+    # visualize
+    from demo.visualize_niigz import draw_box, visulize_3d
+    d.crop_size=None
+    data, lb = d.read_data(2, read_gt=True)
+    data = (data[1]*255).to(torch.uint8)
+    lb = lb.int()
+    #
+    lb2 = lb[:,[1,2,4,5]].repeat(data.size(0),1)
+    lb2[:lb[0,0]]=0
+    lb2[lb[0,3]:]=0
+    p = draw_box(data[:,None],lb2)
+    # demo_plot(data[1].numpy(), lb)
+    visulize_3d(p/255, save_name='demo.png')
+
+    # check shape
+    # for i in range(10):
+    #     print(d[i]["image"].shape)

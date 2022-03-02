@@ -1,3 +1,4 @@
+from sklearn.cluster import get_bin_seeds
 import torch
 from torch.nn import functional as F
 from torch import nn
@@ -254,6 +255,7 @@ class DynamicMaskHead(nn.Module):
                 mask_logits = self.mask_heads_forward_with_coords(
                     mask_feats, mask_feat_stride, pred_instances
                 )
+                # mask_logits is N*1*H*W
                 pred_instances.pred_global_masks = mask_logits.sigmoid()
 
             return pred_instances

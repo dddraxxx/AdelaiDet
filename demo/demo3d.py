@@ -1,6 +1,5 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 import argparse
-from functools import reduce
 import glob
 import multiprocessing as mp
 import os
@@ -11,19 +10,29 @@ import tqdm
 
 from detectron2.data.detection_utils import read_image
 from detectron2.utils.logger import setup_logger
-from adet.utils.dataset_2d import Slices
-from visualize_niigz import visulize_3d
 
-from predictor import VisualizationDemo
+from demo.predictor3d import VisualizationDemo
 from adet.config import get_cfg
+from adet.utils.volume_utils import read_niigz
+from detectron2.config import CfgNode
+
+from adet.utils.dataset_3d import Volumes, read_volume, save_volume
 
 # constants
 WINDOW_NAME = "COCO detections"
 
 
+def setup_cfg_3d(args):
+    cfg = CfgNode()
+    cfg.merge_from_file(args.config_file)
+    cfg.merge_from_list(args.opts)
+    cfg.freeze()
+    return cfg
+
 def setup_cfg(args):
     # load config from file and command-line arguments
     cfg = get_cfg()
+    cfg.set_new_allowed(True)
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
     # Set score_threshold for builtin models
@@ -31,9 +40,7 @@ def setup_cfg(args):
     cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = args.confidence_threshold
     cfg.MODEL.FCOS.INFERENCE_TH_TEST = args.confidence_threshold
     cfg.MODEL.MEInst.INFERENCE_TH_TEST = args.confidence_threshold
-    cfg.MODEL.PANOPTIC_FPN.COMBINE.INSTANCES_CONFIDENCE_THRESH = (
-        args.confidence_threshold
-    )
+    cfg.MODEL.PANOPTIC_FPN.COMBINE.INSTANCES_CONFIDENCE_THRESH = args.confidence_threshold
     cfg.freeze()
     return cfg
 
@@ -46,15 +53,11 @@ def get_parser():
         metavar="FILE",
         help="path to config file",
     )
-    parser.add_argument(
-        "--webcam", action="store_true", help="Take inputs from webcam."
-    )
+    parser.add_argument("--webcam", action="store_true", help="Take inputs from webcam.")
     parser.add_argument("--video-input", help="Path to video file.")
+    parser.add_argument("--input", nargs="+", help="A list of space separated input images")
     parser.add_argument(
-        "--input", nargs="+", help="A list of space separated input images"
-    )
-    parser.add_argument(
-        "--output",
+        '-o',"--output",
         help="A file or directory to save output visualizations. "
         "If not given, will show output in an OpenCV window.",
     )
@@ -86,10 +89,7 @@ if __name__ == "__main__":
 
     if args.input:
         if os.path.isdir(args.input[0]):
-            args.input = [
-                os.path.join(args.input[0], fname)
-                for fname in os.listdir(args.input[0])
-            ]
+            args.input = [os.path.join(args.input[0], fname) for fname in os.listdir(args.input[0])]
         elif len(args.input) == 1:
             args.input = glob.glob(os.path.expanduser(args.input[0]))
             assert args.input, "The input path(s) was not found"
@@ -97,43 +97,46 @@ if __name__ == "__main__":
             # use PIL, to be consistent with evaluation
             # img = read_image(path, format="BGR")
             # modified
-
-            sl = Slices(1)
-            img = sl.get_whole_item(2)
+            normalizer = lambda x: (x - x.mean(dim=[1, 2, 3], keepdim=True)) / x.std(
+                dim=[1, 2, 3], keepdim=True
+            )
+            ds = Volumes(1)
+            # ds[path]
+            img, lab = ds.read_data(1)
+            header = ds.header
+            with open('gt_boxes.txt', 'w') as fout:
+                fout.write(str(lab))
 
             # normalize
-            print("Input shape: {}".format(img.shape))
-            h,w = img.shape[-3:-1]
-
-            visulize_3d(img.permute(0, 3, 1, 2), 3, 1, "input_img2.png")
+            print('Input shape: {}'.format(img.shape))
+            # st = torch.tensor([76, 212, 226])
+            # end = st+128
+            # img = img[:, st[0]:end[0],st[1]:end[1],st[2]:end[2]]
+            
+            save_volume('input1.nii.gz', img[0], header)
+            img = normalizer(img)
             img = img.numpy()
-
+            
+            
             start_time = time.time()
-            demo.predictor._multi2d = True
-            print(demo.predictor.model, file=open("2d_network.js", "w"))
+            # predictions, visualized_output = demo.run_on_image(img)
+            demo.predictor._3d=True
             predictions = demo.run_on_image(img)
-
-            im_inds = [p['instances'].im_inds.tolist() for p in predictions]
-            print('img_ids for predicted boxes: {}'.format(im_inds))
-            pred_msks = [p["instances"].pred_masks.to('cpu') for p in predictions]
-            f = lambda x: x if x.size(0)==1 else reduce(torch.logical_or, x, torch.zeros(h,w))[None]
-            pred = torch.cat([f(p) for p in pred_msks])
-            print("Output shape: {}".format(pred.shape))
-            visulize_3d(pred, 3, 1, 'output_img2.png')
+            save_volume('output1.nii.gz', predictions.squeeze().cpu(), header)
             logger.info(
                 "{}: detected {} instances in {:.2f}s".format(
                     path, len(predictions), time.time() - start_time
                 )
             )
-            pred_msks[0]
+
             # if args.output:
-            # if os.path.isdir(args.output):
-            #     assert os.path.isdir(args.output), args.output
-            #     out_filename = os.path.join(args.output, os.path.basename(path))
-            # else:
-            #     assert len(args.input) == 1, "Please specify a directory with args.output"
-            #     out_filename = args.output
-            # visualized_output.save(out_filename)
+            #     if os.path.isdir(args.output):
+            #         assert os.path.isdir(args.output), args.output
+            #         out_filename = os.path.join(args.output, os.path.basename(path))
+            #     else:
+            #         assert len(args.input) == 1, "Please specify a directory with args.output"
+            #         out_filename = args.output
+            #     visualized_output.save(out_filename)
             # else:
             #     cv2.imshow(WINDOW_NAME, visualized_output.get_image()[:, :, ::-1])
             #     if cv2.waitKey(0) == 27:

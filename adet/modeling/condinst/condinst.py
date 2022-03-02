@@ -110,13 +110,19 @@ class CondInst(nn.Module):
         pixel_mean = torch.Tensor(cfg.MODEL.PIXEL_MEAN).to(self.device).view(3, 1, 1)
         pixel_std = torch.Tensor(cfg.MODEL.PIXEL_STD).to(self.device).view(3, 1, 1)
         self.normalizer = lambda x: (x - pixel_mean) / pixel_std
+        self.normalizer = lambda x: (x - x.mean(dim=[1,2], keepdim=True)) / x.std(
+            dim=[1, 2], keepdim=True
+        )
         self.to(self.device)
 
     def forward(self, batched_inputs):
+        '''
+        x: dict[ N*C*H*W ] '''
         original_images = [x["image"].to(self.device) for x in batched_inputs]
 
         # normalize images
         images_norm = [self.normalizer(x) for x in original_images]
+        # print(images_norm[0].shape)
         images_norm = ImageList.from_tensors(images_norm, self.backbone.size_divisibility)
 
         features = self.backbone(images_norm.tensor)
@@ -148,9 +154,7 @@ class CondInst(nn.Module):
                 self.add_bitmasks(gt_instances, images_norm.tensor.size(-2), images_norm.tensor.size(-1))
         else:
             gt_instances = None
-
         mask_feats, sem_losses = self.mask_branch(features, gt_instances)
-
         proposals, proposal_losses = self.proposal_generator(
             images_norm, features, gt_instances, self.controller
         )
