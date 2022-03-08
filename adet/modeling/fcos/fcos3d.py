@@ -8,7 +8,8 @@ from detectron2.layers import ShapeSpec, NaiveSyncBatchNorm
 from detectron2.modeling.proposal_generator.build import PROPOSAL_GENERATOR_REGISTRY
 
 from adet.layers import DFConv2d, NaiveGroupNorm
-from adet.utils.comm import compute_locations
+from .fcos_outputs3d import FCOSOutputs3D
+from adet.utils.comm import compute_locations, compute_locations3d
 from .fcos_outputs import FCOSOutputs
 
 
@@ -40,13 +41,13 @@ class ModuleListDial(nn.ModuleList):
 
 
 @PROPOSAL_GENERATOR_REGISTRY.register()
-class FCOS(nn.Module):
+class FCOS3D(nn.Module):
     """
     Implement FCOS (https://arxiv.org/abs/1904.01355).
     """
     def __init__(self, cfg, input_shape: Dict[str, ShapeSpec]):
         super().__init__()
-        print(input_shape)
+        # print(input_shape)
         self.in_features = cfg.MODEL.FCOS.IN_FEATURES
         self.fpn_strides = cfg.MODEL.FCOS.FPN_STRIDES
         self.yield_proposal = cfg.MODEL.FCOS.YIELD_PROPOSAL
@@ -55,7 +56,7 @@ class FCOS(nn.Module):
         self.fcos_head = FCOSHead(cfg, [input_shape[f] for f in self.in_features])
         self.in_channels_to_top_module = self.fcos_head.in_channels_to_top_module
 
-        self.fcos_outputs = FCOSOutputs(cfg)
+        self.fcos_outputs = FCOSOutputs3D(cfg)
 
     def forward_head(self, features, top_module=None):
         features = [features[f] for f in self.in_features]
@@ -77,7 +78,7 @@ class FCOS(nn.Module):
 
         """
         features = [features[f] for f in self.in_features]
-        locations = self.compute_locations(features)
+        locations = self.compute_locations3d(features)
         logits_pred, reg_pred, ctrness_pred, top_feats, bbox_towers = self.fcos_head(
             features, top_module, self.yield_proposal or self.yield_box_feats
         )
@@ -111,12 +112,12 @@ class FCOS(nn.Module):
                 }
             return results, extras
 
-    def compute_locations(self, features):
+    def compute_locations3d(self, features):
         locations = []
         for level, feature in enumerate(features):
-            h, w = feature.size()[-2:]
-            locations_per_level = compute_locations(
-                h, w, self.fpn_strides[level],
+            s, h, w = feature.size()[-3:]
+            locations_per_level = compute_locations3d(
+                s, h, w, self.fpn_strides[level],
                 feature.device
             )
             locations.append(locations_per_level)
@@ -152,10 +153,7 @@ class FCOSHead(nn.Module):
             tower = []
             num_convs, use_deformable = head_configs[head]
             for i in range(num_convs):
-                if use_deformable and i == num_convs - 1:
-                    conv_func = DFConv2d
-                else:
-                    conv_func = nn.Conv2d
+                conv_func = nn.Conv3d
                 tower.append(conv_func(
                     in_channels, in_channels,
                     kernel_size=3, stride=1,
@@ -167,7 +165,7 @@ class FCOSHead(nn.Module):
                     tower.append(NaiveGroupNorm(32, in_channels))
                 elif norm == "BN":
                     tower.append(ModuleListDial([
-                        nn.BatchNorm2d(in_channels) for _ in range(self.num_levels)
+                        nn.BatchNorm3d(in_channels) for _ in range(self.num_levels)
                     ]))
                 elif norm == "SyncBN":
                     tower.append(ModuleListDial([
@@ -177,16 +175,16 @@ class FCOSHead(nn.Module):
             self.add_module('{}_tower'.format(head),
                             nn.Sequential(*tower))
 
-        self.cls_logits = nn.Conv2d(
+        self.cls_logits = nn.Conv3d(
             in_channels, self.num_classes,
             kernel_size=3, stride=1,
             padding=1
         )
-        self.bbox_pred = nn.Conv2d(
-            in_channels, 4, kernel_size=3,
+        self.bbox_pred = nn.Conv3d(
+            in_channels, 6, kernel_size=3,
             stride=1, padding=1
         )
-        self.ctrness = nn.Conv2d(
+        self.ctrness = nn.Conv3d(
             in_channels, 1, kernel_size=3,
             stride=1, padding=1
         )
@@ -202,7 +200,7 @@ class FCOSHead(nn.Module):
             self.bbox_pred, self.ctrness
         ]:
             for l in modules.modules():
-                if isinstance(l, nn.Conv2d):
+                if isinstance(l, (nn.Conv2d, nn.Conv3d)):
                     torch.nn.init.normal_(l.weight, std=0.01)
                     torch.nn.init.constant_(l.bias, 0)
 

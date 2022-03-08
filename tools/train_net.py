@@ -63,7 +63,7 @@ class random3D(Dataset):
         self.length = length
         self.data = [torch.rand(1, 250, 400, 400) for _ in range(3)]
         self.crop = T.RandSpatialCrop(
-            (64, 64, 64), random_center=False, random_size=False
+            (64*2, 64*2, 64*2), random_center=False, random_size=False
         )
         self.normalizer = lambda x: (x-x.mean(dim=[1,2,3],keepdim=True))/x.std(dim=[1,2,3],keepdim=True)
 
@@ -72,9 +72,10 @@ class random3D(Dataset):
         index = index % len(self.data)
         x = self.data[index]
         gt_instance = Instances((0, 0))
-        gt_boxes = Boxes3D(torch.tensor([40,60,40,60,40,60])[None])
+        gt_boxes = Boxes3D(torch.tensor([40,40,40,60,60,60])[None])
         gt_instance.gt_boxes = gt_boxes
-        size = dict(height=128, width=128, depth=128)
+        gt_instance.gt_classes = torch.tensor([0])
+        size = dict(height=128, width=64, depth=256)
         x = self.normalizer(self.crop(x))
         return {"image": x, "instances": gt_instance, **size}
 
@@ -181,9 +182,9 @@ class Trainer(DefaultTrainer):
             mapper = DatasetMapperWithBasis(cfg, True)
         # return build_detection_train_loader(cfg, mapper=mapper)
         # return DataLoader(random3D(cfg.SOLVER.MAX_ITER), 1, collate_fn=lambda x: x, shuffle=True)
-        if '3d' not in cfg.MODEL.META_ARCHITECTURE.lower():
-            return DataLoader(get_dataset2d(cfg.SOLVER.MAX_ITER), 2, collate_fn=lambda x: x, shuffle=True, pin_memory=True,   num_workers=4)
-        return DataLoader(get_dataset(cfg.SOLVER.MAX_ITER), cfg.SOLVER.IMS_PER_BATCH, collate_fn=lambda x: x, shuffle=True, pin_memory=True,   num_workers=4)
+        if '3d' not in cfg.MODEL.META_ARCHITECTURE.lower() and len(cfg.MODEL.PIXEL_MEAN)==3:
+            return DataLoader(get_dataset2d(cfg.SOLVER.MAX_ITER), cfg.SOLVER.IMS_PER_BATCH, collate_fn=lambda x: x, shuffle=True, pin_memory=True,   num_workers=cfg.SOLVER.IMS_PER_BATCH+8)
+        return DataLoader(get_dataset(cfg.SOLVER.MAX_ITER), cfg.SOLVER.IMS_PER_BATCH, collate_fn=lambda x: x, shuffle=True, pin_memory=True,   num_workers=cfg.SOLVER.IMS_PER_BATCH+4)
 
     @classmethod
     def build_evaluator(cls, cfg, dataset_name, output_folder=None):

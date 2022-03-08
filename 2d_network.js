@@ -1,11 +1,11 @@
 CondInst(
   (backbone): FPN(
+    (fpn_lateral2): Conv2d(256, 256, kernel_size=(1, 1), stride=(1, 1))
+    (fpn_output2): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
     (fpn_lateral3): Conv2d(512, 256, kernel_size=(1, 1), stride=(1, 1))
     (fpn_output3): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
     (fpn_lateral4): Conv2d(1024, 256, kernel_size=(1, 1), stride=(1, 1))
     (fpn_output4): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-    (fpn_lateral5): Conv2d(2048, 256, kernel_size=(1, 1), stride=(1, 1))
-    (fpn_output5): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
     (top_block): LastLevelP6P7(
       (p6): Conv2d(256, 256, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
       (p7): Conv2d(256, 256, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
@@ -217,54 +217,6 @@ CondInst(
           )
         )
       )
-      (res5): Sequential(
-        (0): BottleneckBlock(
-          (shortcut): Conv2d(
-            1024, 2048, kernel_size=(1, 1), stride=(2, 2), bias=False
-            (norm): FrozenBatchNorm2d(num_features=2048, eps=1e-05)
-          )
-          (conv1): Conv2d(
-            1024, 512, kernel_size=(1, 1), stride=(2, 2), bias=False
-            (norm): FrozenBatchNorm2d(num_features=512, eps=1e-05)
-          )
-          (conv2): Conv2d(
-            512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False
-            (norm): FrozenBatchNorm2d(num_features=512, eps=1e-05)
-          )
-          (conv3): Conv2d(
-            512, 2048, kernel_size=(1, 1), stride=(1, 1), bias=False
-            (norm): FrozenBatchNorm2d(num_features=2048, eps=1e-05)
-          )
-        )
-        (1): BottleneckBlock(
-          (conv1): Conv2d(
-            2048, 512, kernel_size=(1, 1), stride=(1, 1), bias=False
-            (norm): FrozenBatchNorm2d(num_features=512, eps=1e-05)
-          )
-          (conv2): Conv2d(
-            512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False
-            (norm): FrozenBatchNorm2d(num_features=512, eps=1e-05)
-          )
-          (conv3): Conv2d(
-            512, 2048, kernel_size=(1, 1), stride=(1, 1), bias=False
-            (norm): FrozenBatchNorm2d(num_features=2048, eps=1e-05)
-          )
-        )
-        (2): BottleneckBlock(
-          (conv1): Conv2d(
-            2048, 512, kernel_size=(1, 1), stride=(1, 1), bias=False
-            (norm): FrozenBatchNorm2d(num_features=512, eps=1e-05)
-          )
-          (conv2): Conv2d(
-            512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False
-            (norm): FrozenBatchNorm2d(num_features=512, eps=1e-05)
-          )
-          (conv3): Conv2d(
-            512, 2048, kernel_size=(1, 1), stride=(1, 1), bias=False
-            (norm): FrozenBatchNorm2d(num_features=2048, eps=1e-05)
-          )
-        )
-      )
     )
   )
   (proposal_generator): FCOS(
@@ -298,7 +250,7 @@ CondInst(
         (11): ReLU()
       )
       (share_tower): Sequential()
-      (cls_logits): Conv2d(256, 2, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+      (cls_logits): Conv2d(256, 1, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
       (bbox_pred): Conv2d(256, 4, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
       (ctrness): Conv2d(256, 1, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
       (scales): ModuleList(

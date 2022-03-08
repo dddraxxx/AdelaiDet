@@ -8,6 +8,7 @@ training_dir
 *.jpg
 *.png
 *.txt
+*.pt
 
 # compilation and distribution
 __pycache__

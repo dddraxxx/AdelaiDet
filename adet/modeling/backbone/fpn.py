@@ -72,7 +72,7 @@ def build_fcos_resnet_fpn_backbone(cfg, input_shape: ShapeSpec):
     top_levels = cfg.MODEL.FCOS.TOP_LEVELS
     in_channels_top = out_channels
     if top_levels == 2:
-        top_block = LastLevelP6P7(in_channels_top, out_channels, "p5")
+        top_block = LastLevelP6P7(in_channels_top, out_channels, cfg.MODEL.FCOS.IN_FEATURES[-3])
     if top_levels == 1:
         top_block = LastLevelP6(in_channels_top, out_channels, "p5")
     elif top_levels == 0:

@@ -8,10 +8,11 @@ import time
 import cv2
 import torch
 import tqdm
+from torchvision.utils import draw_segmentation_masks
 
 from detectron2.data.detection_utils import read_image
 from detectron2.utils.logger import setup_logger
-from adet.utils.dataset_2d import Slices
+from adet.utils.dataset_2d import PyTMinMaxScalerVectorized, Slices
 from visualize_niigz import visulize_3d
 
 from predictor import VisualizationDemo
@@ -99,13 +100,16 @@ if __name__ == "__main__":
             # modified
 
             sl = Slices(1)
-            img = sl.get_whole_item(2)
+            ind = 1
+            sl.data_path = sl.data_path_tight
+            img = sl.get_whole_item(ind)
+            ind=0
 
             # normalize
             print("Input shape: {}".format(img.shape))
             h,w = img.shape[-3:-1]
 
-            visulize_3d(img.permute(0, 3, 1, 2), 3, 1, "input_img2.png")
+            visulize_3d(img.permute(0, 3, 1, 2), 3, 1, "input_img{}.png".format(ind))
             img = img.numpy()
 
             start_time = time.time()
@@ -116,16 +120,35 @@ if __name__ == "__main__":
             im_inds = [p['instances'].im_inds.tolist() for p in predictions]
             print('img_ids for predicted boxes: {}'.format(im_inds))
             pred_msks = [p["instances"].pred_masks.to('cpu') for p in predictions]
-            f = lambda x: x if x.size(0)==1 else reduce(torch.logical_or, x, torch.zeros(h,w))[None]
-            pred = torch.cat([f(p) for p in pred_msks])
+            print([((p==1).sum(),(p==0).sum(), p.unique()) for p in pred_msks])
+            f_or = lambda x: x if x.size(0)==1 else reduce(torch.logical_or, x, torch.zeros(h,w))[None]
+            f_and = lambda x: x if x.size(0)==1 else reduce(torch.logical_and, x, torch.zeros(h,w))[None]
+            f = f_or
+            pred = torch.cat([f(p) for p in pred_msks]).float()
+            # pred = torch.cat([p[:1] for p in pred_msks]).float()
             print("Output shape: {}".format(pred.shape))
-            visulize_3d(pred, 3, 1, 'output_img2.png')
+            visulize_3d(pred, 3, 1, 'output_img{}.png'.format(ind))
+
+            # Do overlay
+            overlay_img = []
+            img = torch.from_numpy(img).permute(0, 3, 1, 2)
+            img = PyTMinMaxScalerVectorized()(img)*255
+            img = img.to(torch.uint8)
+            for im,lb in zip(img,pred_msks):
+                if len(lb)==0:
+                    overlay_img.append(im)
+                    continue
+                overlay_img.append(draw_segmentation_masks(
+                    im, lb.bool(), alpha=0.5
+                ))
+            visulize_3d(torch.stack(overlay_img)/255, 3, 1, 'draw_mask{}.png'.format(ind))
+
             logger.info(
                 "{}: detected {} instances in {:.2f}s".format(
                     path, len(predictions), time.time() - start_time
                 )
             )
-            pred_msks[0]
+            
             # if args.output:
             # if os.path.isdir(args.output):
             #     assert os.path.isdir(args.output), args.output

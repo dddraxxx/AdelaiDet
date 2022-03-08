@@ -44,6 +44,27 @@ def aligned_bilinear(tensor, factor):
 
     return tensor[:, :, :oh - 1, :ow - 1]
 
+def aligned_bilinear3d(tensor, factor):
+    assert tensor.dim() == 5
+    assert factor >= 1
+    assert int(factor) == factor
+
+    if factor == 1:
+        return tensor
+
+    s, h, w = tensor.size()[2:]
+    tensor = F.pad(tensor, pad=(0, 1, 0, 1, 0, 1), mode="replicate")
+    os = factor * s + 1
+    oh = factor * h + 1
+    ow = factor * w + 1
+    tensor = F.interpolate(
+        tensor, size=(os, oh, ow), mode="trilinear", align_corners=True
+    )
+    tensor = F.pad(
+        tensor, pad=(factor // 2, 0, factor // 2, 0, factor // 2, 0), mode="replicate"
+    )
+
+    return tensor[:, :, : os - 1, : oh - 1, : ow - 1]
 
 def compute_locations(h, w, stride, device):
     shifts_x = torch.arange(
@@ -58,6 +79,27 @@ def compute_locations(h, w, stride, device):
     shift_x = shift_x.reshape(-1)
     shift_y = shift_y.reshape(-1)
     locations = torch.stack((shift_x, shift_y), dim=1) + stride // 2
+    return locations
+
+
+def compute_locations3d(s, h, w, stride, device):
+    shifts_z = torch.arange(
+        0, s*stride, step =stride,
+        dtype=torch.float32, device = device
+    )
+    shifts_x = torch.arange(
+        0, w * stride, step=stride,
+        dtype=torch.float32, device=device
+    )
+    shifts_y = torch.arange(
+        0, h * stride, step=stride,
+        dtype=torch.float32, device=device
+    )
+    shift_z, shift_y, shift_x = torch.meshgrid(shifts_z, shifts_y, shifts_x)
+    shift_x = shift_x.reshape(-1)
+    shift_y = shift_y.reshape(-1)
+    shift_z = shift_z.reshape(-1)
+    locations = torch.stack((shift_z, shift_y,shift_x), dim=1) + stride // 2
     return locations
 
 
@@ -96,6 +138,68 @@ def compute_ious(pred, target):
 
     area_intersect = w_intersect * h_intersect
     area_union = target_aera + pred_aera - area_intersect
+
+    ious = (area_intersect + 1.0) / (area_union + 1.0)
+    gious = ious - (ac_uion - area_union) / ac_uion
+
+    return ious, gious
+
+def compute_ious_3d(pred, target):
+    """
+    Args:
+        pred: Nx4 predicted bounding boxes
+        target: Nx4 target bounding boxes
+        Both are in the form of FCOS prediction (l, t, r, b)
+    """
+    pred_left = pred[:, 0]
+    pred_top = pred[:, 1]
+    pred_n = pred[:, 2]
+    pred_right = pred[:, 3]
+    pred_bottom = pred[:, 4]
+    pred_f = pred[:, 5]
+
+    target_left = target[:, 0]
+    target_top = target[:, 1]
+    target_n = target[:, 2]
+    target_right = target[:, 3]
+    target_bottom = target[:, 4]
+    target_f = target[:, 5]
+
+    target_aera = (
+        (target_left + target_right)
+        * (target_top + target_bottom)
+        * (target_n + target_f)
+    )
+    pred_area = (pred_left + pred_right) * (pred_top + pred_bottom) * (pred_n + pred_f)
+
+    w_intersect = torch.min(pred_left, target_left) + torch.min(
+        pred_right, target_right
+    )
+    h_intersect = torch.min(pred_bottom, target_bottom) + torch.min(
+        pred_top, target_top
+    )
+    s_intersect = torch.min(pred_n, target_n) + torch.min(pred_f, target_f)
+
+    g_w_intersect = torch.max(pred_left, target_left) + torch.max(
+        pred_right, target_right
+    )
+    g_h_intersect = torch.max(pred_bottom, target_bottom) + torch.max(
+        pred_top, target_top
+    )
+    g_s_intersect = torch.max(pred_n, target_n) + torch.max(pred_f, target_f)
+    ac_uion = g_w_intersect * g_h_intersect * g_s_intersect
+
+    # print("pred :{}".format(pred))
+    # print("target :{}".format(target))
+
+    area_intersect = w_intersect * h_intersect * s_intersect
+    area_union = target_aera + pred_area - area_intersect
+
+    # print("target_area: {}".format(target_aera))
+    # sht = locals()
+    # printde = lambda x: print("{}: {}".format(x, sht[x]))
+    # printde('pred_area')
+    # printde('area_intersect')
 
     ious = (area_intersect + 1.0) / (area_union + 1.0)
     gious = ious - (ac_uion - area_union) / ac_uion

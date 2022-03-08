@@ -11,12 +11,13 @@ import tqdm
 from detectron2.data.detection_utils import read_image
 from detectron2.utils.logger import setup_logger
 
-from demo.predictor3d import VisualizationDemo
+from predictor3d import VisualizationDemo
 from adet.config import get_cfg
 from adet.utils.volume_utils import read_niigz
 from detectron2.config import CfgNode
 
 from adet.utils.dataset_3d import Volumes, read_volume, save_volume
+from visualize_niigz import PyTMinMaxScalerVectorized, visulize_3d
 
 # constants
 WINDOW_NAME = "COCO detections"
@@ -102,10 +103,10 @@ if __name__ == "__main__":
             )
             ds = Volumes(1)
             # ds[path]
-            img, lab = ds.read_data(1)
+            img, lab = ds.get_data(1)
             header = ds.header
-            with open('gt_boxes.txt', 'w') as fout:
-                fout.write(str(lab))
+            # with open('gt_boxes.txt', 'w') as fout:
+            #     fout.write(str(lab))
 
             # normalize
             print('Input shape: {}'.format(img.shape))
@@ -113,8 +114,9 @@ if __name__ == "__main__":
             # end = st+128
             # img = img[:, st[0]:end[0],st[1]:end[1],st[2]:end[2]]
             
-            save_volume('input1.nii.gz', img[0], header)
+            # save_volume('input1.nii.gz', img[0], header)
             img = normalizer(img)
+            visulize_3d(PyTMinMaxScalerVectorized()(img.float())[0], save_name='01data_3d.png')
             img = img.numpy()
             
             
@@ -122,7 +124,8 @@ if __name__ == "__main__":
             # predictions, visualized_output = demo.run_on_image(img)
             demo.predictor._3d=True
             predictions = demo.run_on_image(img)
-            save_volume('output1.nii.gz', predictions.squeeze().cpu(), header)
+
+            visulize_3d(predictions.squeeze().cpu(), '01pred_3d.png')
             logger.info(
                 "{}: detected {} instances in {:.2f}s".format(
                     path, len(predictions), time.time() - start_time

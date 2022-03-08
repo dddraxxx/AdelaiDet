@@ -41,6 +41,22 @@ def save_img(path, width=5, inter_dst=10, save_name=None):
     path = pa(path)
     visulize_3d(img, width, inter_dst, save_name or path.with_suffix(".png"))
 
+class PyTMinMaxScalerVectorized(object):
+    """
+    Transforms each channel to the range [0, 1].
+    """
+
+    def __call__(self, tensor: torch.Tensor):
+        """
+        tensor: N*C*H*W"""
+        s = tensor.shape
+        tensor = tensor.flatten(-2)
+        scale = 1.0 / (
+            tensor.max(dim=-1, keepdim=True)[0] - tensor.min(dim=-1, keepdim=True)[0]
+        )
+        tensor.mul_(scale).sub_(tensor.min(dim=-1, keepdim=True)[0])
+        return tensor.view(*s)
+
 
 if __name__ == "__main__":
     save_img("/home/hynx/AdelaiDet/input1.nii.gz")
