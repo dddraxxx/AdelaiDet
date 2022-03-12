@@ -15,6 +15,7 @@ this file as an example of how to use the library.
 You may want to write your own script with your datasets and other customizations.
 """
 
+from functools import wraps
 import logging
 import os
 from collections import OrderedDict
@@ -43,6 +44,7 @@ from detectron2.evaluation import (
 from detectron2.modeling import GeneralizedRCNNWithTTA
 from detectron2.utils.logger import setup_logger
 from detectron2.structures import Instances, Boxes
+from detectron2.data.build import trivial_batch_collator
 
 from adet.data.dataset_mapper import DatasetMapperWithBasis
 from adet.data.fcpose_dataset_mapper import FCPoseDatasetMapper
@@ -54,7 +56,7 @@ from torch.utils.data import Dataset, DataLoader
 
 import monai.transforms as T
 
-from adet.utils.dataset_3d import get_dataset, Boxes3D
+from adet.utils.dataset_3d import Copier, get_dataset, Boxes3D
 from adet.utils.dataset_2d import get_dataset2d
 
 class random3D(Dataset):
@@ -182,9 +184,10 @@ class Trainer(DefaultTrainer):
             mapper = DatasetMapperWithBasis(cfg, True)
         # return build_detection_train_loader(cfg, mapper=mapper)
         # return DataLoader(random3D(cfg.SOLVER.MAX_ITER), 1, collate_fn=lambda x: x, shuffle=True)
+        total_len = cfg.SOLVER.MAX_ITER * cfg.SOLVER.IMS_PER_BATCH * comm.get_world_size()
         if '3d' not in cfg.MODEL.META_ARCHITECTURE.lower() and len(cfg.MODEL.PIXEL_MEAN)==3:
-            return DataLoader(get_dataset2d(cfg.SOLVER.MAX_ITER), cfg.SOLVER.IMS_PER_BATCH, collate_fn=lambda x: x, shuffle=True, pin_memory=True,   num_workers=cfg.SOLVER.IMS_PER_BATCH+8)
-        return DataLoader(get_dataset(cfg.SOLVER.MAX_ITER), cfg.SOLVER.IMS_PER_BATCH, collate_fn=lambda x: x, shuffle=True, pin_memory=True,   num_workers=cfg.SOLVER.IMS_PER_BATCH+4)
+            return DataLoader(get_dataset2d(total_len), cfg.SOLVER.IMS_PER_BATCH, collate_fn=Copier(lambda x: x), shuffle=True, pin_memory=True,   num_workers=cfg.SOLVER.IMS_PER_BATCH+8)
+        return DataLoader(get_dataset(total_len), cfg.SOLVER.IMS_PER_BATCH, collate_fn= trivial_batch_collator, shuffle=True, pin_memory=True,   num_workers=cfg.SOLVER.IMS_PER_BATCH+4)
 
     @classmethod
     def build_evaluator(cls, cfg, dataset_name, output_folder=None):

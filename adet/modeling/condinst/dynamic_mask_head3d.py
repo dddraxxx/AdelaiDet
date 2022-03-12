@@ -61,14 +61,15 @@ def dice_coefficient(x, target):
 
 
 def compute_project_term_3d(mask_scores, gt_bitmasks):
+    assert mask_scores.dim() ==5, gt_bitmasks.dim() ==5
     mask_losses_y = dice_coefficient(
-        mask_scores.max(dim=2, keepdim=True)[0], gt_bitmasks.max(dim=2, keepdim=True)[0]
+        mask_scores.amax(dim=[2,3], keepdim=True), gt_bitmasks.amax(dim=[2,3], keepdim=True)
     )
     mask_losses_x = dice_coefficient(
-        mask_scores.max(dim=3, keepdim=True)[0], gt_bitmasks.max(dim=3, keepdim=True)[0]
+        mask_scores.amax(dim=[3,4], keepdim=True), gt_bitmasks.amax(dim=[3,4], keepdim=True)
     )
     mask_losses_z = dice_coefficient(
-        mask_scores.max(dim=4, keepdim=True)[0], gt_bitmasks.max(dim=4, keepdim=True)[0]
+        mask_scores.amax(dim=[2,4], keepdim=True), gt_bitmasks.amax(dim=[2,4], keepdim=True)
     )
     return (mask_losses_x + mask_losses_y + mask_losses_z).mean()
 
@@ -221,10 +222,10 @@ class DynamicMaskHead3D(nn.Module):
             relative_coords = relative_coords.to(dtype=mask_feats.dtype)
 
             mask_head_inputs = torch.cat([
-                relative_coords, mask_feats[im_inds].reshape(n_inst, self.in_channels, S*H * W)
+                relative_coords, mask_feats[im_inds].reshape(n_inst, self.in_channels, S * H * W)
             ], dim=1)
         else:
-            mask_head_inputs = mask_feats[im_inds].reshape(n_inst, self.in_channels, S, H * W)
+            mask_head_inputs = mask_feats[im_inds].reshape(n_inst, self.in_channels, S * H * W)
 
         mask_head_inputs = mask_head_inputs.reshape(1, -1, S, H, W)
 

@@ -22,7 +22,7 @@ from adet.modeling.condinst.mask_branch3d import build_mask_branch3d
 from .dynamic_mask_head import build_dynamic_mask_head
 from .mask_branch import build_mask_branch
 
-from adet.utils.comm import aligned_bilinear
+from adet.utils.comm import aligned_bilinear, aligned_bilinear3d
 
 __all__ = ["CondInst"]
 
@@ -189,9 +189,9 @@ class UInst3D(nn.Module):
         # pixel_std = torch.Tensor(cfg.MODEL.PIXEL_STD).to(self.device).view(3, 1, 1)
         # self.normalizer = lambda x: (x - pixel_mean) / pixel_std
         self.normalize_image = cfg.MODEL.UINST3D.NORMALIZE
-        self.normalizer = lambda x: (x - x.mean(dim=[1, 2], keepdim=True)) / x.std(
-            dim=[1, 2], keepdim=True
-        )
+        # self.normalizer = lambda x: (x - x.mean(dim=[1, 2], keepdim=True)) / x.std(
+        #     dim=[1, 2], keepdim=True
+        # )
         self.to(self.device)
 
     def forward(self, batched_inputs):
@@ -272,19 +272,20 @@ class UInst3D(nn.Module):
                 proposals, mask_feats
             )
 
-            padded_im_h, padded_im_w = images_norm.tensor.size()[-2:]
+            padded_im_s, padded_im_h, padded_im_w = images_norm.tensor.size()[-3:]
             processed_results = []
             for im_id, (input_per_image, image_size) in enumerate(
                 zip(batched_inputs, images_norm.image_sizes)
             ):
-                height = input_per_image.get("height", image_size[0])
-                width = input_per_image.get("width", image_size[1])
+                depth = input_per_image.get('depth', image_size[0])
+                height = input_per_image.get("height", image_size[1])
+                width = input_per_image.get("width", image_size[2])
 
                 instances_per_im = pred_instances_w_masks[
                     pred_instances_w_masks.im_inds == im_id
                 ]
                 instances_per_im = self.postprocess(
-                    instances_per_im, height, width, padded_im_h, padded_im_w
+                    instances_per_im, depth, height, width, padded_im_s, padded_im_h, padded_im_w
                 )
 
                 processed_results.append({"instances": instances_per_im})
@@ -458,8 +459,10 @@ class UInst3D(nn.Module):
     def postprocess(
         self,
         results,
+        output_depth,
         output_height,
         output_width,
+        padded_im_s,
         padded_im_h,
         padded_im_w,
         mask_threshold=0.5,
@@ -479,38 +482,40 @@ class UInst3D(nn.Module):
         Returns:
             Instances: the resized output from the model, based on the output resolution
         """
-        scale_x, scale_y = (
-            output_width / results.image_size[1],
-            output_height / results.image_size[0],
+        scale_s, scale_x, scale_y = (
+            output_depth / results.image_size[0],
+            output_width / results.image_size[2],
+            output_height / results.image_size[1],
         )
-        resized_im_h, resized_im_w = results.image_size
-        results = Instances((output_height, output_width), **results.get_fields())
+        resized_im_s, resized_im_h, resized_im_w = results.image_size
+        results = Instances((output_depth, output_height, output_width), **results.get_fields())
 
         if results.has("pred_boxes"):
             output_boxes = results.pred_boxes
         elif results.has("proposal_boxes"):
             output_boxes = results.proposal_boxes
 
-        output_boxes.scale(scale_x, scale_y)
+        output_boxes.scale(scale_s, scale_y, scale_x)
         output_boxes.clip(results.image_size)
 
         results = results[output_boxes.nonempty()]
 
         if results.has("pred_global_masks"):
-            mask_h, mask_w = results.pred_global_masks.size()[-2:]
+            mask_s, mask_h, mask_w = results.pred_global_masks.size()[-3:]
+            factor_s = padded_im_s // mask_s
             factor_h = padded_im_h // mask_h
             factor_w = padded_im_w // mask_w
-            assert factor_h == factor_w
+            assert factor_h == factor_w == factor_s
             factor = factor_h
-            pred_global_masks = aligned_bilinear(results.pred_global_masks, factor)
-            pred_global_masks = pred_global_masks[:, :, :resized_im_h, :resized_im_w]
+            pred_global_masks = aligned_bilinear3d(results.pred_global_masks, factor)
+            pred_global_masks = pred_global_masks[:, :, :resized_im_s, :resized_im_h, :resized_im_w]
             pred_global_masks = F.interpolate(
                 pred_global_masks,
-                size=(output_height, output_width),
-                mode="bilinear",
+                size=(output_depth, output_height, output_width),
+                mode="trilinear",
                 align_corners=False,
             )
-            pred_global_masks = pred_global_masks[:, 0, :, :]
+            pred_global_masks = pred_global_masks[:, 0, :, :, :]
             results.pred_masks = (pred_global_masks > mask_threshold).float()
 
         return results

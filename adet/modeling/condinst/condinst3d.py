@@ -48,11 +48,11 @@ def unfold_wo_center_3d(x, kernel_size, dilation):
     # print(x_st.shape, grid_x.shape)
 
     unfolded_x = pad_x[...,grid_x.flatten(),grid_y.flatten(),grid_z.flatten()]
-    unfolded_x = unfolded_x.reshape(N, C, S, H, W, kernel_size**3).permute(0,1,-1,2,3,4)
+    unfolded_x = unfolded_x.reshape(N, C, S, H, W, kernel_size**3).permute(0,1,5,2,3,4)
     # print(unfolded_x.shape)
 
     # remove the center pixels
-    size = kernel_size ** 2
+    size = kernel_size ** 3
     unfolded_x = torch.cat((
         unfolded_x[:, :, :size // 2],
         unfolded_x[:, :, size // 2 + 1:]

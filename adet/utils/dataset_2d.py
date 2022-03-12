@@ -53,6 +53,7 @@ class Slices(Volumes):
         label: 1, N, 4"""
         for i in self.prep_data:
             x, label = self.read_data(i, read_gt=True)
+            x[0] = self.normalizer(x[0])
             s = x.size(1)
 
             # print(label.unique(), label.shape)
@@ -146,11 +147,11 @@ class PyTMinMaxScalerVectorized(object):
     Transforms each channel to the range [0, 1].
     """
 
-    def __call__(self, tensor: torch.Tensor):
+    def __call__(self, tensor: torch.Tensor, dim=2):
         """
         tensor: N*C*H*W"""
         s = tensor.shape
-        tensor = tensor.flatten(-2)
+        tensor = tensor.flatten(-dim)
         scale = 1.0 / (
             tensor.max(dim=-1, keepdim=True)[0] - tensor.min(dim=-1, keepdim=True)[0]
         )

@@ -1,5 +1,6 @@
 from functools import reduce
 from random import randrange
+from typing import Tuple
 import numpy as np
 
 import torch.nn.functional as F
@@ -53,6 +54,49 @@ class Boxes3D(Boxes):
         # Boxes are assumed float32 and does not support to(dtype)
         return Boxes3D(self.tensor.to(device=device))
 
+    def clip(self, box_size: Tuple[int, int, int]) -> None:
+        """
+        Clip (in place) the boxes by limiting x coordinates to the range [0, width]
+        and y coordinates to the range [0, height].
+
+        Args:
+            box_size (height, width): The clipping box's size.
+        """
+        assert torch.isfinite(self.tensor).all(), "Box tensor contains infinite or NaN!"
+        s, h, w = box_size
+        x1 = self.tensor[:, 2].clamp(min=0, max=w)
+        y1 = self.tensor[:, 1].clamp(min=0, max=h)
+        s1 = self.tensor[:, 0].clamp(min=0, max=s)
+        x2 = self.tensor[:, 5].clamp(min=0, max=w)
+        y2 = self.tensor[:, 4].clamp(min=0, max=h)
+        s2 = self.tensor[:, 3].clamp(min=0, max=s)
+        self.tensor = torch.stack((s1, y1, x1, s2, y2, x2), dim=-1)
+
+    def nonempty(self, threshold: float = 0.0) -> torch.Tensor:
+        """
+        Find boxes that are non-empty.
+        A box is considered empty, if either of its side is no larger than threshold.
+
+        Returns:
+            Tensor:
+                a binary vector which represents whether each box is empty
+                (False) or non-empty (True).
+        """
+        box = self.tensor
+        widths = box[:, 3] - box[:, 0]
+        heights = box[:, 4] - box[:, 1]
+        depth = box[:, 5] - box[:, 2]
+        keep = (widths > threshold) & (heights > threshold) & (depth > threshold)
+        return keep
+
+    def scale(self, scale_x: float, scale_y: float, scale_z: float) -> None:
+        """
+        Scale the box with horizontal and vertical scaling factors
+        """
+        self.tensor[:, 0::3] *= scale_x
+        self.tensor[:, 1::3] *= scale_y
+        self.tensor[:, 2::3] *= scale_z
+
     def area(self) -> torch.Tensor:
         """
         Computes the area of all the boxes.
@@ -61,10 +105,51 @@ class Boxes3D(Boxes):
             torch.Tensor: a vector with areas of each box.
         """
         box = self.tensor
+        keep = self.nonempty()
         area = (
             (box[:, 3] - box[:, 0]) * (box[:, 4] - box[:, 1]) * (box[:, 5] - box[:, 2])
         )
+        area[~keep] = 0
         return area
+
+    def iou(self, id1, id2) -> torch.Tensor:
+        inter_box = torch.cat(
+            [
+                torch.max(self.tensor[id1, :3], self.tensor[id2, :3]),
+                torch.min(self.tensor[id1, 3:], self.tensor[id2, 3:]),
+            ],
+            dim=-1,
+        )
+        print(inter_box.shape)
+        i = Boxes3D(inter_box).area()
+        u = self[id1].area() + self[id2].area() - i
+        return i / u
+
+    def __getitem__(self, item) -> "Boxes":
+        """
+        Args:
+            item: int, slice, or a BoolTensor
+
+        Returns:
+            Boxes: Create a new :class:`Boxes` by indexing.
+
+        The following usage are allowed:
+
+        1. `new_boxes = boxes[3]`: return a `Boxes` which contains only one box.
+        2. `new_boxes = boxes[2:10]`: return a slice of boxes.
+        3. `new_boxes = boxes[vector]`, where vector is a torch.BoolTensor
+           with `length = len(boxes)`. Nonzero elements in the vector will be selected.
+
+        Note that the returned Boxes might share storage with this Boxes,
+        subject to Pytorch's indexing semantics.
+        """
+        if isinstance(item, int):
+            return Boxes3D(self.tensor[item].view(1, -1))
+        b = self.tensor[item]
+        assert (
+            b.dim() == 2
+        ), "Indexing on Boxes with {} failed to return a matrix!".format(item)
+        return Boxes3D(b)
 
 
 def read_header(path):
@@ -155,21 +240,33 @@ def pad_to(coord, size):
     return torch.cat([ctr - size // 2, ctr + size // 2])
 
 
+def normalizer_3d(x):
+    return (x - x.mean(dim=[1, 2, 3], keepdim=True)) / x.std(
+        dim=[1, 2, 3], keepdim=True
+    )
+
+
+class Copier(object):
+    def __init__(self, func):
+        self.func = func
+
+    def __call__(self, *args, **kwargs):
+        self.func(*args, **kwargs)
+
+
 class Volumes(Dataset):
     def __init__(self, length):
         super().__init__()
         self.length = length
         # 10 samples total
-        self.data = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+        self.data = [0, 1, 2, 3, 4]  # 5, 6, 7, 8, 9]
         # case236, case297 has no label
-        self.prep_data = list(range(0, 100))
+        self.prep_data = list(range(15, 300))
         self.crop_size = (128,) * 3
         # self.crop = T.RandSpatialCrop(
         #     (128,128,128), random_center=False, random_size=False
         # )
-        self.normalizer = lambda x: (x - x.mean(dim=[1, 2, 3], keepdim=True)) / x.std(
-            dim=[1, 2, 3], keepdim=True
-        )
+        self.normalizer = normalizer_3d
         # self.header = read_header(dpath.format(self.data[0]))
         self.header = {
             "spacing": (0.5, 0.919921875, 0.919921875),
@@ -192,6 +289,7 @@ class Volumes(Dataset):
                 # length = l[:, [3, 4, 5]] - l[:, [0, 1, 2]]
                 # print(length)
                 data, label = self.preprocess(x[:1], label)
+                # data = x[:1]
                 assert data.dim() == 4, label.dim() == 2
                 # print(x.shape, label.shape)
             else:
@@ -202,9 +300,21 @@ class Volumes(Dataset):
 
     def preprocess(self, data, label):
         """
+        Get the most left label and resize_crop it to crop_size
         data: 1, S, H, W
         gt: 1, S, H, W
         label: N, 6"""
+        # normalize it
+        from dataset_2d import PyTMinMaxScalerVectorized
+
+        print(data.shape, data.unique())
+        coord = tuple((data[..., 0] == -1024).nonzero()[0]) + (0,)
+        assert data[coord] == -1024
+        data = self.normalizer(data)
+        data.clamp_(-3, 3)
+        data = PyTMinMaxScalerVectorized()(data, 3)
+        bkgr_value = data[coord]
+
         # pick the most left one
         l = label[[0]].long()
 
@@ -264,7 +374,7 @@ class Volumes(Dataset):
                 self.crop_size,
                 method="symmetric",
                 mode="constant",
-                value=0,
+                value=bkgr_value,
             )(cr_gt)
         # print(cr_data.shape, cr_gt.shape)
         cr_l = T.BoundingRect()(cr_gt)[0][[0, 2, 4, 1, 3, 5]]
@@ -280,7 +390,7 @@ class Volumes(Dataset):
 
         # print(ind)
         data = torch.as_tensor(data)
-        data = self.normalizer(data)
+        # data = self.normalizer(data)
         # 1 is kidney (I think)
         labels = get_label(read_volume(lpath.format(ind))[0], 1)
 
@@ -343,10 +453,16 @@ class Volumes(Dataset):
 
         return data.float(), labels.float()
 
-    def get_data(self, index):
+    def get_data(self, index, read_gt=False):
+        """
+        data: 1, S, H, W
+        label: 1, 6"""
         dct = torch.load(self.datapath.format(index))
         x, labels = dct["data"], dct["label"]
-        return x.float(), torch.from_numpy(labels)[None].float()
+        if not read_gt:
+            return x.float(), torch.as_tensor(labels)[None].float()
+        else:
+            return x.float(), torch.as_tensor(labels)[None].float(), dct["gt"]
 
     def __getitem__(self, index):
         """
@@ -368,7 +484,7 @@ class Volumes(Dataset):
         # print(x.shape)
         # size = dict(height=128, width=128, depth=128)
         x = self.normalizer(x).float()
-        return {"image": x, "instances": gt_instance, "height": self.crop_size[0]}
+        return {"image": x, "instances": gt_instance, "height": self.crop_size[0], "index": index}
 
     def __len__(self):
         return self.length
@@ -409,26 +525,46 @@ if __name__ == "__main__":
     d = Volumes(10)
     print("start")
     # d._prepare_data()
-    # for i in range(10):
-    #     _, l = d.read_data(i, preprocess=False)
-    #     print(_.view(-1).mode())
-    #     print(l[:, [3, 4, 5]] - l[:, [0, 1, 2]], _.shape)
+    # d._prepare_data(save_path=d.orig_datapath[:-9])
+    # d.datapath = d.orig_datapath
+    # for i in range(300):
+    #     # _, l = d.read_data(i, preprocess=False)
+    #     _, l = d.get_data(i)
+    #     print(_.view(-1).mode()[0])
+    #     assert _.view(-1).mode()[0].item() == -1024
+    #     print(i)
+    # print(_.view(-1).mode())
+    # print(l[:, [3, 4, 5]] - l[:, [0, 1, 2]], _.shape)
 
     # visualize
-    from demo.visualize_niigz import draw_box, visulize_3d
+    from demo.visualize_niigz import draw_box, visulize_3d, PyTMinMaxScalerVectorized
 
-    d.crop_size = None
-    # data, lb = d.read_data(0, read_gt=True)
-    data, lb = d.get_data(0)
+    # data, lb = d.read_data(1, read_gt=True, preprocess=False)
+    # lb = lb[[0]]
+    # print("normalize")
+    # data = d.normalizer(data)
+    # data.clamp_(-3, 3)
+    # data = (PyTMinMaxScalerVectorized()(data[0], 3) * 255).to(torch.uint8)
+    # gt = data[1]
+
+    data, lb, gt = d.get_data(1, read_gt=True)
+    gt = gt[0]
+    print("get_data")
     data = (data[0] * 255).to(torch.uint8)
     lb = lb.int()
-    #
     lb2 = lb[:, [1, 2, 4, 5]].repeat(data.size(0), 1)
     lb2[: lb[0, 0]] = 0
     lb2[lb[0, 3] :] = 0
-    p = draw_box(data[lb[0, 0] : lb[0, 3], None], lb2[lb[0, 0] : lb[0, 3]])
+    # p = draw_box(data[lb[0, 0] : lb[0, 3], None], lb2[lb[0, 0] : lb[0, 3]])
+    p = draw_box(data[:, None], lb2)
     # demo_plot(data[1].numpy(), lb)
-    visulize_3d(p / 255, 3, 3, save_name="demo.png")
+    # visulize_3d(p / 255, 5, 10, save_name="01data_3d.png")
+
+    # gt = gt * 255
+    # gt = gt.to(torch.uint8)
+    # p = draw_box(gt[lb[0, 0] : lb[0, 3], None], lb2[lb[0, 0] : lb[0, 3]])
+    # p = p / 255
+    # p = visulize_3d(p, 3, 5, save_name="01gt_3d.png")
 
     # check shape
     # for i in range(10):

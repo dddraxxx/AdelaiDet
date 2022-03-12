@@ -1,5 +1,6 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 import argparse
+from functools import reduce
 import glob
 import multiprocessing as mp
 import os
@@ -7,9 +8,11 @@ import time
 import cv2
 import torch
 import tqdm
+from torchvision.utils import draw_segmentation_masks
 
 from detectron2.data.detection_utils import read_image
 from detectron2.utils.logger import setup_logger
+from adet.utils.comm import aligned_bilinear3d
 
 from predictor3d import VisualizationDemo
 from adet.config import get_cfg
@@ -17,7 +20,7 @@ from adet.utils.volume_utils import read_niigz
 from detectron2.config import CfgNode
 
 from adet.utils.dataset_3d import Volumes, read_volume, save_volume
-from visualize_niigz import PyTMinMaxScalerVectorized, visulize_3d
+from visualize_niigz import PyTMinMaxScalerVectorized, visulize_3d, draw_3d_box_on_vol
 
 # constants
 WINDOW_NAME = "COCO detections"
@@ -30,6 +33,7 @@ def setup_cfg_3d(args):
     cfg.freeze()
     return cfg
 
+
 def setup_cfg(args):
     # load config from file and command-line arguments
     cfg = get_cfg()
@@ -39,9 +43,11 @@ def setup_cfg(args):
     # Set score_threshold for builtin models
     cfg.MODEL.RETINANET.SCORE_THRESH_TEST = args.confidence_threshold
     cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = args.confidence_threshold
-    cfg.MODEL.FCOS.INFERENCE_TH_TEST = args.confidence_threshold
+    # cfg.MODEL.FCOS.INFERENCE_TH_TEST = args.confidence_threshold
     cfg.MODEL.MEInst.INFERENCE_TH_TEST = args.confidence_threshold
-    cfg.MODEL.PANOPTIC_FPN.COMBINE.INSTANCES_CONFIDENCE_THRESH = args.confidence_threshold
+    cfg.MODEL.PANOPTIC_FPN.COMBINE.INSTANCES_CONFIDENCE_THRESH = (
+        args.confidence_threshold
+    )
     cfg.freeze()
     return cfg
 
@@ -54,11 +60,16 @@ def get_parser():
         metavar="FILE",
         help="path to config file",
     )
-    parser.add_argument("--webcam", action="store_true", help="Take inputs from webcam.")
-    parser.add_argument("--video-input", help="Path to video file.")
-    parser.add_argument("--input", nargs="+", help="A list of space separated input images")
     parser.add_argument(
-        '-o',"--output",
+        "--webcam", action="store_true", help="Take inputs from webcam."
+    )
+    parser.add_argument("--video-input", help="Path to video file.")
+    parser.add_argument(
+        "--input", nargs="+", help="A list of space separated input images"
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
         help="A file or directory to save output visualizations. "
         "If not given, will show output in an OpenCV window.",
     )
@@ -90,7 +101,10 @@ if __name__ == "__main__":
 
     if args.input:
         if os.path.isdir(args.input[0]):
-            args.input = [os.path.join(args.input[0], fname) for fname in os.listdir(args.input[0])]
+            args.input = [
+                os.path.join(args.input[0], fname)
+                for fname in os.listdir(args.input[0])
+            ]
         elif len(args.input) == 1:
             args.input = glob.glob(os.path.expanduser(args.input[0]))
             assert args.input, "The input path(s) was not found"
@@ -103,29 +117,57 @@ if __name__ == "__main__":
             )
             ds = Volumes(1)
             # ds[path]
-            img, lab = ds.get_data(1)
+            img, lab, gt = ds.get_data(1, read_gt=True)
             header = ds.header
             # with open('gt_boxes.txt', 'w') as fout:
             #     fout.write(str(lab))
 
             # normalize
-            print('Input shape: {}'.format(img.shape))
+            print("Input shape: {}".format(img.shape))
             # st = torch.tensor([76, 212, 226])
             # end = st+128
             # img = img[:, st[0]:end[0],st[1]:end[1],st[2]:end[2]]
-            
+
             # save_volume('input1.nii.gz', img[0], header)
             img = normalizer(img)
-            visulize_3d(PyTMinMaxScalerVectorized()(img.float())[0], save_name='01data_3d.png')
+            img_n = PyTMinMaxScalerVectorized()(img)
+            # PyTMinMaxScalerVectorized()(img.float())[0]
+            visulize_3d(draw_3d_box_on_vol(img_n, lab), save_name="01data_3d.png")
             img = img.numpy()
-            
-            
-            start_time = time.time()
-            # predictions, visualized_output = demo.run_on_image(img)
-            demo.predictor._3d=True
-            predictions = demo.run_on_image(img)
 
-            visulize_3d(predictions.squeeze().cpu(), '01pred_3d.png')
+            start_time = time.time()
+            demo.predictor._3d = True
+            predictions = demo.run_on_image(img)
+            predictions = predictions[0]
+
+            im_inds = predictions["instances"].im_inds.tolist()
+            print("img_ids for predicted boxes: {}".format(im_inds))
+            pred_msks = predictions["instances"].pred_masks.to("cpu")
+            print(pred_msks.shape, (pred_msks == 1).sum(), (pred_msks == 0).sum())
+            print("Output shape: {}".format(pred_msks.shape))
+            dst = 2
+            tmp = pred_msks.amax(dim=[0,2,3])
+            low, high = tmp.nonzero()[[0,-1]].squeeze().tolist()
+            print(low,high)
+            d = (img_n[0][low-1:high+1:dst])
+            for i, p in enumerate([pred_msks.cpu()[:3]]):
+                p = p[:, low-1:high+1:dst].transpose(0,1)
+                res = []
+                for d1, p1 in zip(d, p):
+                    res.append(
+                        draw_segmentation_masks(
+                            (d1 * 255).repeat(3, 1, 1).to(torch.uint8),
+                            p1.bool(),
+                            alpha=0.6,
+                            colors=['red','green','pink']
+                        )
+                    )
+                visulize_3d(
+                    torch.stack(res) / 255,
+                    inter_dst=1,
+                    save_name="01pred_3d_{}.png".format(i),
+                )
+
             logger.info(
                 "{}: detected {} instances in {:.2f}s".format(
                     path, len(predictions), time.time() - start_time

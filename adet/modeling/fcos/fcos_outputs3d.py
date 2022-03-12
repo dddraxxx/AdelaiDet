@@ -10,7 +10,7 @@ from fvcore.nn import sigmoid_focal_loss_jit
 from adet.modeling.backbone.unet3d import compute_ctrness_targets_3d
 
 from adet.utils.comm import compute_ious_3d, reduce_sum, reduce_mean, compute_ious
-from adet.layers import ml_nms, IOULoss
+from adet.layers import ml_nms3d, IOULoss
 from adet.utils.dataset_3d import Boxes3D
 
 
@@ -610,7 +610,7 @@ class FCOSOutputs3D(nn.Module):
                 [
                     per_locations[:, 0] - per_box_regression[:, 0],
                     per_locations[:, 1] - per_box_regression[:, 1],
-                    per_locations[:, 2] + per_box_regression[:, 2],
+                    per_locations[:, 2] - per_box_regression[:, 2],
                     per_locations[:, 0] + per_box_regression[:, 3],
                     per_locations[:, 1] + per_box_regression[:, 4],
                     per_locations[:, 2] + per_box_regression[:, 5],
@@ -634,7 +634,8 @@ class FCOSOutputs3D(nn.Module):
         results = []
         for i in range(num_images):
             # multiclass nms
-            result = ml_nms(boxlists[i], self.nms_thresh)
+            result = ml_nms3d(boxlists[i], self.nms_thresh)
+            # result = boxlists[i]
             number_of_detections = len(result)
 
             # Limit to max_per_image detections **over all classes**

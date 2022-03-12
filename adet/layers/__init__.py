@@ -1,5 +1,5 @@
 from .deform_conv import DFConv2d
-from .ml_nms import ml_nms
+from .ml_nms import ml_nms, ml_nms3d
 from .iou_loss import IOULoss
 from .conv_with_kaiming_uniform import conv_with_kaiming_uniform
 from .bezier_align import BezierAlign
