@@ -3,17 +3,20 @@ import torch
 from torch.nn import functional as F
 from torch import nn
 
-from adet.utils.comm import aligned_bilinear3d, compute_locations, aligned_bilinear, compute_locations3d
+from adet.utils.comm import (
+    aligned_bilinear3d,
+    compute_locations,
+    aligned_bilinear,
+    compute_locations3d,
+)
 
 
 def compute_project_term(mask_scores, gt_bitmasks):
     mask_losses_y = dice_coefficient(
-        mask_scores.max(dim=2, keepdim=True)[0],
-        gt_bitmasks.max(dim=2, keepdim=True)[0]
+        mask_scores.max(dim=2, keepdim=True)[0], gt_bitmasks.max(dim=2, keepdim=True)[0]
     )
     mask_losses_x = dice_coefficient(
-        mask_scores.max(dim=3, keepdim=True)[0],
-        gt_bitmasks.max(dim=3, keepdim=True)[0]
+        mask_scores.max(dim=3, keepdim=True)[0], gt_bitmasks.max(dim=3, keepdim=True)[0]
     )
     return (mask_losses_x + mask_losses_y).mean()
 
@@ -25,13 +28,12 @@ def compute_pairwise_term(mask_logits, pairwise_size, pairwise_dilation):
     log_bg_prob = F.logsigmoid(-mask_logits)
 
     from adet.modeling.condinst.condinst import unfold_wo_center
+
     log_fg_prob_unfold = unfold_wo_center(
-        log_fg_prob, kernel_size=pairwise_size,
-        dilation=pairwise_dilation
+        log_fg_prob, kernel_size=pairwise_size, dilation=pairwise_dilation
     )
     log_bg_prob_unfold = unfold_wo_center(
-        log_bg_prob, kernel_size=pairwise_size,
-        dilation=pairwise_dilation
+        log_bg_prob, kernel_size=pairwise_size, dilation=pairwise_dilation
     )
 
     # the probability of making the same prediction = p_i * p_j + (1 - p_i) * (1 - p_j)
@@ -40,10 +42,12 @@ def compute_pairwise_term(mask_logits, pairwise_size, pairwise_dilation):
     log_same_bg_prob = log_bg_prob[:, :, None] + log_bg_prob_unfold
 
     max_ = torch.max(log_same_fg_prob, log_same_bg_prob)
-    log_same_prob = torch.log(
-        torch.exp(log_same_fg_prob - max_) +
-        torch.exp(log_same_bg_prob - max_)
-    ) + max_
+    log_same_prob = (
+        torch.log(
+            torch.exp(log_same_fg_prob - max_) + torch.exp(log_same_bg_prob - max_)
+        )
+        + max_
+    )
 
     # loss = -log(prob)
     return -log_same_prob[:, 0]
@@ -56,12 +60,12 @@ def dice_coefficient(x, target):
     target = target.reshape(n_inst, -1)
     intersection = (x * target).sum(dim=1)
     union = (x ** 2.0).sum(dim=1) + (target ** 2.0).sum(dim=1) + eps
-    loss = 1. - (2 * intersection / union)
+    loss = 1.0 - (2 * intersection / union)
     return loss
 
 
 def compute_project_term_3d(mask_scores, gt_bitmasks):
-    assert mask_scores.dim() ==5, gt_bitmasks.dim() ==5
+    assert mask_scores.dim() == 5, gt_bitmasks.dim() == 5
     mask_losses_y = dice_coefficient(
         mask_scores.amax(dim=[2,3], keepdim=True), gt_bitmasks.amax(dim=[2,3], keepdim=True)
     )
@@ -71,6 +75,15 @@ def compute_project_term_3d(mask_scores, gt_bitmasks):
     mask_losses_z = dice_coefficient(
         mask_scores.amax(dim=[2,4], keepdim=True), gt_bitmasks.amax(dim=[2,4], keepdim=True)
     )
+    # mask_losses_y = dice_coefficient(
+    #     mask_scores.max(dim=2, keepdim=True)[0], gt_bitmasks.max(dim=2, keepdim=True)[0]
+    # )
+    # mask_losses_x = dice_coefficient(
+    #     mask_scores.max(dim=3, keepdim=True)[0], gt_bitmasks.max(dim=3, keepdim=True)[0]
+    # )
+    # mask_losses_z = dice_coefficient(
+    #     mask_scores.max(dim=4, keepdim=True)[0], gt_bitmasks.max(dim=4, keepdim=True)[0]
+    # )
     return (mask_losses_x + mask_losses_y + mask_losses_z).mean()
 
 
@@ -106,6 +119,16 @@ def compute_pairwise_term_3d(mask_logits, pairwise_size, pairwise_dilation):
     return -log_same_prob[:, 0]
 
 
+def compute_area_constraints(mask_logits, bitmasks, thresh):
+    n_inst = mask_logits.size(0)
+    mean_area = (mask_logits.sigmoid() * bitmasks).view(n_inst, -1).sum(
+        1
+    ) / bitmasks.view(n_inst, -1).sum(1)
+    # print(mean_area)
+    # print(mask_logits.shape, bitmasks.shape)
+    return (mean_area - thresh) ** 2 * (mean_area < thresh)
+
+
 def parse_dynamic_params(params, channels, weight_nums, bias_nums):
     assert params.dim() == 2
     assert len(weight_nums) == len(bias_nums)
@@ -114,9 +137,7 @@ def parse_dynamic_params(params, channels, weight_nums, bias_nums):
     num_insts = params.size(0)
     num_layers = len(weight_nums)
 
-    params_splits = list(torch.split_with_sizes(
-        params, weight_nums + bias_nums, dim=1
-    ))
+    params_splits = list(torch.split_with_sizes(params, weight_nums + bias_nums, dim=1))
 
     weight_splits = params_splits[:num_layers]
     bias_splits = params_splits[num_layers:]
@@ -124,7 +145,9 @@ def parse_dynamic_params(params, channels, weight_nums, bias_nums):
     for l in range(num_layers):
         if l < num_layers - 1:
             # out_channels x in_channels x 1 x 1
-            weight_splits[l] = weight_splits[l].reshape(num_insts * channels, -1, 1, 1, 1)
+            weight_splits[l] = weight_splits[l].reshape(
+                num_insts * channels, -1, 1, 1, 1
+            )
             bias_splits[l] = bias_splits[l].reshape(num_insts * channels)
         else:
             # out_channels x in_channels x 1 x 1
@@ -158,6 +181,10 @@ class DynamicMaskHead3D(nn.Module):
         self.pairwise_color_thresh = cfg.MODEL.BOXINST.PAIRWISE.COLOR_THRESH
         self._warmup_iters = cfg.MODEL.BOXINST.PAIRWISE.WARMUP_ITERS
 
+        #
+        self.area_loss_thresh = cfg.MODEL.BOXINST.AREA_LOSS.THRESH
+        self.area_loss_weight = cfg.MODEL.BOXINST.AREA_LOSS.WEIGHT
+
         weight_nums, bias_nums = [], []
         for l in range(self.num_layers):
             if l == 0:
@@ -180,31 +207,28 @@ class DynamicMaskHead3D(nn.Module):
         self.register_buffer("_iter", torch.zeros([1]))
 
     def mask_heads_forward(self, features, weights, biases, num_insts):
-        '''
+        """
         :param features
         :param weights: [w0, w1, ...]
         :param bias: [b0, b1, ...]
         :return:
-        '''
+        """
         assert features.dim() == 5
         n_layers = len(weights)
         x = features
         for i, (w, b) in enumerate(zip(weights, biases)):
-            x = F.conv3d(
-                x, w, bias=b,
-                stride=1, padding=0,
-                groups=num_insts
-            )
+            x = F.conv3d(x, w, bias=b, stride=1, padding=0, groups=num_insts)
             if i < n_layers - 1:
                 x = F.relu(x)
         return x
 
-    def mask_heads_forward_with_coords(
-            self, mask_feats, mask_feat_stride, instances
-    ):
+    def mask_heads_forward_with_coords(self, mask_feats, mask_feat_stride, instances):
         locations = compute_locations3d(
-            mask_feats.size(2), mask_feats.size(3), mask_feats.size(4),
-            stride=mask_feat_stride, device=mask_feats.device
+            mask_feats.size(2),
+            mask_feats.size(3),
+            mask_feats.size(4),
+            stride=mask_feat_stride,
+            device=mask_feats.device,
         )
         n_inst = len(instances)
 
@@ -215,23 +239,30 @@ class DynamicMaskHead3D(nn.Module):
 
         if not self.disable_rel_coords:
             instance_locations = instances.locations
-            relative_coords = instance_locations.reshape(-1, 1, 3) - locations.reshape(1, -1, 3)
+            relative_coords = instance_locations.reshape(-1, 1, 3) - locations.reshape(
+                1, -1, 3
+            )
             relative_coords = relative_coords.permute(0, 2, 1).float()
             soi = self.sizes_of_interest.float()[instances.fpn_levels]
             relative_coords = relative_coords / soi.reshape(-1, 1, 1)
             relative_coords = relative_coords.to(dtype=mask_feats.dtype)
 
-            mask_head_inputs = torch.cat([
-                relative_coords, mask_feats[im_inds].reshape(n_inst, self.in_channels, S * H * W)
-            ], dim=1)
+            mask_head_inputs = torch.cat(
+                [
+                    relative_coords,
+                    mask_feats[im_inds].reshape(n_inst, self.in_channels, S * H * W),
+                ],
+                dim=1,
+            )
         else:
-            mask_head_inputs = mask_feats[im_inds].reshape(n_inst, self.in_channels, S * H * W)
+            mask_head_inputs = mask_feats[im_inds].reshape(
+                n_inst, self.in_channels, S * H * W
+            )
 
         mask_head_inputs = mask_head_inputs.reshape(1, -1, S, H, W)
 
         weights, biases = parse_dynamic_params(
-            mask_head_params, self.channels,
-            self.weight_nums, self.bias_nums
+            mask_head_params, self.channels, self.weight_nums, self.bias_nums
         )
 
         mask_logits = self.mask_heads_forward(mask_head_inputs, weights, biases, n_inst)
@@ -240,7 +271,9 @@ class DynamicMaskHead3D(nn.Module):
 
         assert mask_feat_stride >= self.mask_out_stride
         assert mask_feat_stride % self.mask_out_stride == 0
-        mask_logits = aligned_bilinear3d(mask_logits, int(mask_feat_stride / self.mask_out_stride))
+        mask_logits = aligned_bilinear3d(
+            mask_logits, int(mask_feat_stride / self.mask_out_stride)
+        )
 
         return mask_logits
 
@@ -250,12 +283,16 @@ class DynamicMaskHead3D(nn.Module):
 
             gt_inds = pred_instances.gt_inds
             gt_bitmasks = torch.cat([per_im.gt_bitmasks for per_im in gt_instances])
-            gt_bitmasks = gt_bitmasks[gt_inds].unsqueeze(dim=1).to(dtype=mask_feats.dtype)
+            gt_bitmasks = (
+                gt_bitmasks[gt_inds].unsqueeze(dim=1).to(dtype=mask_feats.dtype)
+            )
 
             losses = {}
 
             if len(pred_instances) == 0:
-                dummy_loss = mask_feats.sum() * 0 + pred_instances.mask_head_params.sum() * 0
+                dummy_loss = (
+                    mask_feats.sum() * 0 + pred_instances.mask_head_params.sum() * 0
+                )
                 if not self.boxinst_enabled:
                     losses["loss_mask"] = dummy_loss
                 else:
@@ -269,26 +306,46 @@ class DynamicMaskHead3D(nn.Module):
 
                 if self.boxinst_enabled:
                     # box-supervised BoxInst losses
-                    image_color_similarity = torch.cat([x.image_color_similarity for x in gt_instances])
-                    image_color_similarity = image_color_similarity[gt_inds].to(dtype=mask_feats.dtype)
+                    image_color_similarity = torch.cat(
+                        [x.image_color_similarity for x in gt_instances]
+                    )
+                    image_color_similarity = image_color_similarity[gt_inds].to(
+                        dtype=mask_feats.dtype
+                    )
 
                     loss_prj_term = compute_project_term_3d(mask_scores, gt_bitmasks)
 
                     pairwise_losses = compute_pairwise_term_3d(
-                        mask_logits, self.pairwise_size,
-                        self.pairwise_dilation
+                        mask_logits, self.pairwise_size, self.pairwise_dilation
                     )
 
-                    weights = (image_color_similarity >= self.pairwise_color_thresh).float() * gt_bitmasks.float()
-                    loss_pairwise = (pairwise_losses * weights).sum() / weights.sum().clamp(min=1.0)
+                    weights = (
+                        image_color_similarity >= self.pairwise_color_thresh
+                    ).float() * gt_bitmasks.float()
+                    loss_pairwise = (
+                        pairwise_losses * weights
+                    ).sum() / weights.sum().clamp(min=1.0)
 
-                    warmup_factor = min(self._iter.item() / float(self._warmup_iters), 1.0)
+                    warmup_factor = min(
+                        self._iter.item() / float(self._warmup_iters), 1.0
+                    )
+                    print(warmup_factor)
                     loss_pairwise = loss_pairwise * warmup_factor
 
-                    losses.update({
-                        "loss_prj": loss_prj_term,
-                        "loss_pairwise": loss_pairwise,
-                    })
+                    area_loss = compute_area_constraints(
+                        mask_logits, gt_bitmasks, self.area_loss_thresh
+                    )
+                    area_loss = (
+                        area_loss.sum() * self.area_loss_weight * warmup_factor ** 2
+                    )
+
+                    losses.update(
+                        {
+                            "loss_prj": loss_prj_term,
+                            "loss_pairwise": loss_pairwise,
+                            "loss_area": area_loss,
+                        }
+                    )
                 else:
                     # fully-supervised CondInst losses
                     mask_losses = dice_coefficient(mask_scores, gt_bitmasks)

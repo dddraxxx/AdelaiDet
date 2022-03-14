@@ -117,7 +117,7 @@ if __name__ == "__main__":
             )
             ds = Volumes(1)
             # ds[path]
-            img, lab, gt = ds.get_data(1, read_gt=True)
+            img, lab, gt = ds.get_data(2, read_gt=True)
             header = ds.header
             # with open('gt_boxes.txt', 'w') as fout:
             #     fout.write(str(lab))
@@ -146,12 +146,21 @@ if __name__ == "__main__":
             print(pred_msks.shape, (pred_msks == 1).sum(), (pred_msks == 0).sum())
             print("Output shape: {}".format(pred_msks.shape))
             dst = 2
-            tmp = pred_msks.amax(dim=[0,2,3])
-            low, high = tmp.nonzero()[[0,-1]].squeeze().tolist()
-            print(low,high)
-            d = (img_n[0][low-1:high+1:dst])
+            tmp = pred_msks.amax(dim=[0, 2, 3])
+            low, high = tmp.nonzero()[[0, -1]].squeeze().tolist()
+
+            lab[0, 0] = 1
+            lab[0, 3] = (high + 2 - low) // dst
+            visulize_3d(
+                draw_3d_box_on_vol(img_n[:, low - 1 : high + 1 : dst], lab),
+                inter_dst=1,
+                save_name="01data_3d_0.png",
+            )
+
+            print(low, high)
+            d = img_n[0][low - 1 : high + 1 : dst]
             for i, p in enumerate([pred_msks.cpu()[:3]]):
-                p = p[:, low-1:high+1:dst].transpose(0,1)
+                p = p[:, low - 1 : high + 1 : dst].transpose(0, 1)
                 res = []
                 for d1, p1 in zip(d, p):
                     res.append(
@@ -159,7 +168,7 @@ if __name__ == "__main__":
                             (d1 * 255).repeat(3, 1, 1).to(torch.uint8),
                             p1.bool(),
                             alpha=0.6,
-                            colors=['red','green','pink']
+                            colors=["red", "green", "pink"],
                         )
                     )
                 visulize_3d(

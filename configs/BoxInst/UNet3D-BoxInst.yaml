@@ -1,9 +1,15 @@
-OUTPUT_DIR: training_dir/BoxInst/UNet3D-BoxInst_5
+OUTPUT_DIR: training_dir/BoxInst/UNet3D-BoxInst_100_0.96
 CUDNN_BENCHMARK: false
 MODEL:
   # WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-BoxInst_10/model_0000699.pth
   # WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-BoxInst_10_1/model_0006299.pth
-  WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-BoxInst_5/model_0000499.pth
+  WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-BoxInst_5_0.92/model_0000099.pth
+  # WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_5_0.88/model_0002099.pth
+  # WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-BoxInst_5_0.92/model_0000499.pth
+  # WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-BoxInst_5_0.8/model_0009499.pth
+  # WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_5_0.96_2dprj/model_0000199.pth
+  WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_100_0.96/model_0009999.pth
+
   BACKBONE:
     ANTI_ALIAS: false
     FREEZE_AT: 2
@@ -12,10 +18,13 @@ MODEL:
     BOTTOM_PIXELS_REMOVED: 0
     ENABLED: true
     PAIRWISE:
-      COLOR_THRESH: 0.92
+      COLOR_THRESH: 0.96
       DILATION: 1
       SIZE: 3
-      WARMUP_ITERS: 300
+      WARMUP_ITERS: 1000 # 300
+    AREA_LOSS:
+      THRESH: 0.6
+      WEIGHT: 1
   CONDINST:
     BOTTOM_PIXELS_REMOVED: -1
     MASK_BRANCH:

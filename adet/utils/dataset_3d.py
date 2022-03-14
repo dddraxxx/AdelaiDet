@@ -259,7 +259,7 @@ class Volumes(Dataset):
         super().__init__()
         self.length = length
         # 10 samples total
-        self.data = [0, 1, 2, 3, 4]  # 5, 6, 7, 8, 9]
+        self.data = [0, 1, 2, 3, 4]  # list(range(100))  # 5, 6, 7, 8, 9]
         # case236, case297 has no label
         self.prep_data = list(range(15, 300))
         self.crop_size = (128,) * 3
@@ -307,13 +307,15 @@ class Volumes(Dataset):
         # normalize it
         from dataset_2d import PyTMinMaxScalerVectorized
 
-        print(data.shape, data.unique())
-        coord = tuple((data[..., 0] == -1024).nonzero()[0]) + (0,)
-        assert data[coord] == -1024
+        print(data.shape, data.min(), data.view(-1).mode())
+        # assert data.min()%1024==0
+        # coord = tuple((data[..., 0] == -1024).nonzero()[0]) + (0,)
+        # assert data[coord] % 1024==0
         data = self.normalizer(data)
         data.clamp_(-3, 3)
         data = PyTMinMaxScalerVectorized()(data, 3)
-        bkgr_value = data[coord]
+        bkgr_value = data.min()
+        # bkgr_value = data[coord]
 
         # pick the most left one
         l = label[[0]].long()
@@ -484,7 +486,12 @@ class Volumes(Dataset):
         # print(x.shape)
         # size = dict(height=128, width=128, depth=128)
         x = self.normalizer(x).float()
-        return {"image": x, "instances": gt_instance, "height": self.crop_size[0], "index": index}
+        return {
+            "image": x,
+            "instances": gt_instance,
+            "height": self.crop_size[0],
+            "index": index,
+        }
 
     def __len__(self):
         return self.length
@@ -527,38 +534,51 @@ if __name__ == "__main__":
     # d._prepare_data()
     # d._prepare_data(save_path=d.orig_datapath[:-9])
     # d.datapath = d.orig_datapath
-    # for i in range(300):
-    #     # _, l = d.read_data(i, preprocess=False)
-    #     _, l = d.get_data(i)
-    #     print(_.view(-1).mode()[0])
-    #     assert _.view(-1).mode()[0].item() == -1024
-    #     print(i)
+    mi = 1
+    for i in range(300):
+        _, l = d.read_data(i, preprocess=False, read_gt=True)
+        # _, l = d.get_data(i)
+        print(l)
+        la = (l[0,3:] - l[0,:3]).prod()
+        ga = (_[1] == 1 ).sum()
+        print(la, ga, ga / la)
+
     # print(_.view(-1).mode())
     # print(l[:, [3, 4, 5]] - l[:, [0, 1, 2]], _.shape)
 
     # visualize
     from demo.visualize_niigz import draw_box, visulize_3d, PyTMinMaxScalerVectorized
 
-    # data, lb = d.read_data(1, read_gt=True, preprocess=False)
-    # lb = lb[[0]]
-    # print("normalize")
-    # data = d.normalizer(data)
-    # data.clamp_(-3, 3)
-    # data = (PyTMinMaxScalerVectorized()(data[0], 3) * 255).to(torch.uint8)
-    # gt = data[1]
+    # v1
+    data, lb = d.read_data(65, read_gt=True, preprocess=False)
+    lb = lb[[0]]
+    print("normalize")
+    data = d.normalizer(data)
+    data.clamp_(-3, 3)
+    data = (PyTMinMaxScalerVectorized()(data[0], 3) * 255).to(torch.uint8)
+    gt = data[1]
+    # v2
+    # data, lb, gt = d.get_data(1, read_gt=True)
+    # data = (data[0] * 255).to(torch.uint8)
 
-    data, lb, gt = d.get_data(1, read_gt=True)
     gt = gt[0]
     print("get_data")
-    data = (data[0] * 255).to(torch.uint8)
     lb = lb.int()
     lb2 = lb[:, [1, 2, 4, 5]].repeat(data.size(0), 1)
     lb2[: lb[0, 0]] = 0
     lb2[lb[0, 3] :] = 0
-    # p = draw_box(data[lb[0, 0] : lb[0, 3], None], lb2[lb[0, 0] : lb[0, 3]])
-    p = draw_box(data[:, None], lb2)
+    # show label in data
+    p = draw_box(data[lb[0, 0] : lb[0, 3], None], lb2[lb[0, 0] : lb[0, 3]])
+    # p = draw_box(data[:, None], lb2)
     # demo_plot(data[1].numpy(), lb)
-    # visulize_3d(p / 255, 5, 10, save_name="01data_3d.png")
+    visulize_3d(p / 255, 5, 10, save_name="01data_3d.png")
+    # show color bar
+    # p = data[lb[0, 0] : lb[0, 3]].float()
+    # p = visulize_3d(p , 5, 10)
+    # import matplotlib.pyplot as plt
+    # plt.imshow(p.permute(1,2,0))
+    # plt.colorbar()
+    # plt.savefig('01data_3d.png')
 
     # gt = gt * 255
     # gt = gt.to(torch.uint8)
