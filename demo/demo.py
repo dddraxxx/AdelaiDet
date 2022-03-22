@@ -12,8 +12,8 @@ from torchvision.utils import draw_segmentation_masks
 
 from detectron2.data.detection_utils import read_image
 from detectron2.utils.logger import setup_logger
-from adet.utils.dataset_2d import PyTMinMaxScalerVectorized, Slices
-from visualize_niigz import visulize_3d
+from adet.utils.dataset_2d import Slices
+from adet.utils.visualize_niigz import visulize_3d, PyTMinMaxScalerVectorized
 
 from predictor import VisualizationDemo
 from adet.config import get_cfg
@@ -100,7 +100,7 @@ if __name__ == "__main__":
             # modified
 
             sl = Slices(1)
-            ind = 1
+            ind = 4
             sl.data_path = sl.data_path_tight
             img = sl.get_whole_item(ind)
             ind=0

@@ -1,4 +1,4 @@
-OUTPUT_DIR: training_dir/BoxInst/UNet3D-BoxInst_240_0.96_area
+OUTPUT_DIR: training_dir/BoxInst/UNet3D-CondInst
 CUDNN_BENCHMARK: false
 MODEL:
   # WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-BoxInst_10/model_0000699.pth
@@ -8,9 +8,8 @@ MODEL:
   # WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-BoxInst_5_0.92/model_0000499.pth
   # WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-BoxInst_5_0.8/model_0009499.pth
   # WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_5_0.96_2dprj/model_0000199.pth
-  # WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_100_0.96/model_0000149.pth
-  # WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_100_0.96_area/model_0000199.pth
-  WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_240_0.96_area/model_0000499.pth
+  # WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_100_0.96/model_0009999.pth
+  WEIGHTS:  training_dir/BoxInst/UNet3D-CondInst/model_0000399.pth
 
   BACKBONE:
     ANTI_ALIAS: false
@@ -18,16 +17,16 @@ MODEL:
     NAME: build_fcos_unet_fpn_backbone
   BOXINST:
     BOTTOM_PIXELS_REMOVED: 0
-    ENABLED: true
+    ENABLED: false
     PAIRWISE:
-      COLOR_THRESH: 0.94
+      COLOR_THRESH: 1.1 #0.96
       DILATION: 1
       SIZE: 3
-      WARMUP_ITERS: 800
+      WARMUP_ITERS: 10000 # 300
     AREA_LOSS:
-      THRESH: 0.4
-      WEIGHT: 0.6
-      DOWN_ITER: 400
+      THRESH: 0.6
+      WEIGHT: 0
+      DOWN_ITER: 12000
   CONDINST:
     BOTTOM_PIXELS_REMOVED: -1
     MASK_BRANCH:
@@ -98,8 +97,8 @@ MODEL:
 SOLVER:
   AMP:
     ENABLED: false
-  BASE_LR: 0.001
-  IMS_PER_BATCH: 2
+  BASE_LR: 0.005
+  IMS_PER_BATCH: 8
   BIAS_LR_FACTOR: 1.0
   MOMENTUM: 0.9
   NESTEROV: false
@@ -114,7 +113,7 @@ SOLVER:
     NORM_TYPE: 2.0
   GAMMA: 0.1
   LR_SCHEDULER_NAME: WarmupMultiStepLR
-  MAX_ITER: 500
+  MAX_ITER: 5000
   REFERENCE_WORLD_SIZE: 0
   STEPS: [1200, 2400]
   WARMUP_FACTOR: 0.001 # times base_lr in beginning

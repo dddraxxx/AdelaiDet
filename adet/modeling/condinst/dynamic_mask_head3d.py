@@ -126,8 +126,10 @@ def compute_area_constraints(mask_logits, bitmasks, thresh):
     ) / bitmasks.view(n_inst, -1).sum(1)
     # print(mean_area)
     # print(mask_logits.shape, bitmasks.shape)
-    return (mean_area - thresh) ** 2 * (mean_area < thresh)
+    return (thresh - mean_area) ** 3 * (mean_area < thresh)
 
+def compute_continuity_loss():
+    pass
 
 def parse_dynamic_params(params, channels, weight_nums, bias_nums):
     assert params.dim() == 2
@@ -184,6 +186,8 @@ class DynamicMaskHead3D(nn.Module):
         #
         self.area_loss_thresh = cfg.MODEL.BOXINST.AREA_LOSS.THRESH
         self.area_loss_weight = cfg.MODEL.BOXINST.AREA_LOSS.WEIGHT
+        self.down_iter = cfg.MODEL.BOXINST.AREA_LOSS.DOWN_ITER
+        self.max_iter = cfg.SOLVER.MAX_ITER
 
         weight_nums, bias_nums = [], []
         for l in range(self.num_layers):
@@ -332,11 +336,14 @@ class DynamicMaskHead3D(nn.Module):
                     print(warmup_factor)
                     loss_pairwise = loss_pairwise * warmup_factor
 
+                    area_factor = 1 - (self._iter.item()-self.down_iter) / (self.max_iter - 2000 -self.down_iter)
+                    area_factor = max(min(warmup_factor**2, area_factor), 0)
+                    print(area_factor)
                     area_loss = compute_area_constraints(
                         mask_logits, gt_bitmasks, self.area_loss_thresh
                     )
                     area_loss = (
-                        area_loss.sum() * self.area_loss_weight * warmup_factor ** 2
+                        area_loss.sum() * self.area_loss_weight * area_factor
                     )
 
                     losses.update(

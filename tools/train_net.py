@@ -186,8 +186,8 @@ class Trainer(DefaultTrainer):
         # return DataLoader(random3D(cfg.SOLVER.MAX_ITER), 1, collate_fn=lambda x: x, shuffle=True)
         total_len = cfg.SOLVER.MAX_ITER * cfg.SOLVER.IMS_PER_BATCH * comm.get_world_size()
         if '3d' not in cfg.MODEL.META_ARCHITECTURE.lower() and len(cfg.MODEL.PIXEL_MEAN)==3:
-            return DataLoader(get_dataset2d(total_len), cfg.SOLVER.IMS_PER_BATCH, collate_fn=Copier(lambda x: x), shuffle=True, pin_memory=True,   num_workers=cfg.SOLVER.IMS_PER_BATCH+8)
-        return DataLoader(get_dataset(total_len), cfg.SOLVER.IMS_PER_BATCH, collate_fn= trivial_batch_collator, shuffle=True, pin_memory=True,   num_workers=cfg.SOLVER.IMS_PER_BATCH+4)
+            return DataLoader(get_dataset2d(total_len), cfg.SOLVER.IMS_PER_BATCH, collate_fn=lambda x: x, shuffle=True, pin_memory=True,   num_workers=cfg.SOLVER.IMS_PER_BATCH+8)
+        return DataLoader(get_dataset(total_len), cfg.SOLVER.IMS_PER_BATCH, collate_fn= trivial_batch_collator, shuffle=True, pin_memory=True,   num_workers=cfg.SOLVER.IMS_PER_BATCH+8)
 
     @classmethod
     def build_evaluator(cls, cfg, dataset_name, output_folder=None):

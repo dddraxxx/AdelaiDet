@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import logging
+from tkinter import image_names
 from typing import Any, List, Tuple
 from skimage import color
 
@@ -246,6 +247,7 @@ class UInst3D(nn.Module):
             else:
                 self.add_bitmasks(
                     gt_instances,
+                    images_norm.tensor.size(-3),
                     images_norm.tensor.size(-2),
                     images_norm.tensor.size(-1),
                 )
@@ -365,7 +367,7 @@ class UInst3D(nn.Module):
 
         return pred_instances_w_masks
 
-    def add_bitmasks_(self, instances, im_h, im_w):
+    def add_bitmasks(self, instances, im_s, im_h, im_w):
         for per_im_gt_inst in instances:
             if not per_im_gt_inst.has("gt_masks"):
                 continue
@@ -393,19 +395,19 @@ class UInst3D(nn.Module):
                 per_im_gt_inst.gt_bitmasks_full = torch.stack(
                     per_im_bitmasks_full, dim=0
                 )
-            else:  # RLE format bitmask
-                bitmasks = per_im_gt_inst.get("gt_masks").tensor
-                h, w = bitmasks.size()[1:]
+            else:
+                bitmasks = per_im_gt_inst.get("gt_masks") # .tensor
+                s, h, w = bitmasks.size()[1:]
                 # pad to new size
                 bitmasks_full = F.pad(
-                    bitmasks, (0, im_w - w, 0, im_h - h), "constant", 0
+                    bitmasks, (0, im_s -  s, 0, im_h - h, 0, im_w - w, ), "constant", 0
                 )
                 bitmasks = bitmasks_full[
-                    :, start :: self.mask_out_stride, start :: self.mask_out_stride
+                    :, start :: self.mask_out_stride, start :: self.mask_out_stride, start::self.mask_out_stride
                 ]
                 per_im_gt_inst.gt_bitmasks = bitmasks
                 per_im_gt_inst.gt_bitmasks_full = bitmasks_full
-
+    
     def add_bitmasks_from_boxes(self, instances, images, image_masks, im_s, im_h, im_w):
         stride = self.mask_out_stride
         start = int(stride // 2)

@@ -32,27 +32,28 @@ class Slices(Volumes):
         # 10 samples total * 6 slices per sample
         # case236, case297 has no label
         self.data = list(range(0,80))
-        self.prep_data=list(range(10, 100))
+        self.prep_data=list(range(236, 300))
         self.sl_len = 6
         self.total_len = 10
         self.crop_size = None
         # self.crop = T.RandSpatialCrop(
         #     (128,128,128), random_center=False, random_size=False
         # )
-        # self.normalizer = lambda x: (x - x.mean(dim=[1, 2, 3], keepdim=True)) / x.std(
-        #     dim=[1, 2, 3], keepdim=True
-        # )
+        self.normalizer = lambda x: (x - x.mean(dim=[-1, -2, -3], keepdim=True)) / x.std(
+            dim=[-1, -2, -3], keepdim=True
+        )
+        self.data_path_nontight_ntr = "/mnt/sdc/kits21/data_2d_notranspose/{:05d}.pt"
         self.data_path_nontight = "/mnt/sdc/kits21/data_2d/{:05d}.pt"
         self.data_path_tight = '/mnt/sdc/kits21/data_2d_tightbox/{:05d}.pt'
         self.data_path_tt_notr = "/mnt/sdc/kits21/data_2d_tightbox_notranspose/{:05d}.pt"
-        self.data_path = self.data_path_tight
+        self.data_path = self.data_path_nontight
 
-    def _prepare_data(self, num_slices=None, save_path="/mnt/sdc/kits21/data_2d"):
+    def _prepare_data(self, num_slices=None, tight_box=False, transpose=True, save_path="/mnt/sdc/kits21/data_2d"):
         """
         data, gt: 1,N,H,W
         label: 1, N, 4"""
         for i in self.prep_data:
-            x, label = self.read_data(i, read_gt=True)
+            x, label = self.read_data(i, read_gt=True, transpose=transpose)
             x[0] = self.normalizer(x[0])
             s = x.size(1)
 
@@ -63,23 +64,23 @@ class Slices(Volumes):
                 lb = lb.int()
                 st = lb[0, 0]
                 ed = lb[0, 3]
-
-                # non-tight box
-                # lb2 = lb[:, [1, 2, 4, 5]].repeat(s, 1)
-                # lb2[:st] = 0
-                # lb2[ed:] = 0
                 
                 # tight box
-                lb2 = torch.zeros(s, 4)
-                lb = lb[0]
-                gt1 = x[1]
-                tmp = torch.zeros_like(gt1)
-                tmp[lb[0]:lb[3],lb[1]:lb[4],lb[2]:lb[5]]=1
-                gt1 = gt1*tmp
-                for gt_sl,j in zip(gt1[st:ed], range(st,ed)):
-                    nz = gt_sl.nonzero()
-                    lb2[j] = torch.tensor((nz[:,0].min(), nz[:,1].min(),nz[:,0].max(),nz[:,1].max()))
-
+                if tight_box:
+                    lb2 = torch.zeros(s, 4)
+                    lb = lb[0]
+                    gt1 = x[1]
+                    tmp = torch.zeros_like(gt1)
+                    tmp[lb[0]:lb[3],lb[1]:lb[4],lb[2]:lb[5]]=1
+                    gt1 = gt1*tmp
+                    for gt_sl,j in zip(gt1[st:ed], range(st,ed)):
+                        nz = gt_sl.nonzero()
+                        lb2[j] = torch.tensor((nz[:,0].min(), nz[:,1].min(),nz[:,0].max(),nz[:,1].max()))
+                # non-tight box
+                else:
+                    lb2 = lb[:, [1, 2, 4, 5]].repeat(s, 1)
+                    lb2[:st] = 0
+                    lb2[ed:] = 0
 
                 slices = torch.linspace(st, ed, self.total_len)[
                     self.total_len // 2
@@ -134,6 +135,7 @@ class Slices(Volumes):
         # print(x.shape)
         # size = dict(height=128, width=128, depth=128)
         # x = self.normalizer(self.crop(x)).float()
+        # print(x.shape, index, sl)
         return {
             "image": x,
             "instances": gt_instance,
@@ -142,29 +144,12 @@ class Slices(Volumes):
         }
 
 
-class PyTMinMaxScalerVectorized(object):
-    """
-    Transforms each channel to the range [0, 1].
-    """
-
-    def __call__(self, tensor: torch.Tensor, dim=2):
-        """
-        tensor: N*C*H*W"""
-        s = tensor.shape
-        tensor = tensor.flatten(-dim)
-        scale = 1.0 / (
-            tensor.max(dim=-1, keepdim=True)[0] - tensor.min(dim=-1, keepdim=True)[0]
-        )
-        tensor.mul_(scale).sub_(tensor.min(dim=-1, keepdim=True)[0])
-        return tensor.view(*s)
-
-
 if __name__ == "__main__":
-    from demo.visualize_niigz import visulize_3d
+    from adet.utils.visualize_niigz import visulize_3d
     s = Slices(0)
     print("start")
-    from demo.visualize_niigz import draw_box
-    s._prepare_data(save_path="/mnt/sdc/kits21/data_2d_tightbox_notranspose")
+    from adet.utils.visualize_niigz import draw_box, PyTMinMaxScalerVectorized
+    s._prepare_data(save_path=s.data_path_nontight[:-9], tight_box=False, transpose=True)
     d, l, gt = s.get_whole_item(0, True, True)
     d = d.permute(0, 3, 1, 2)
     imgs = PyTMinMaxScalerVectorized()(d) * 256
@@ -172,11 +157,11 @@ if __name__ == "__main__":
 
     p = draw_box(imgs, l[0])
     p = p / 255
-    p = visulize_3d(p, 3, 1, save_name="ind_03_tight.png")
+    p = visulize_3d(p, 3, 1, save_name="ind_03_notight.png")
 
     gt = gt.permute(1, 0, 2, 3)
     gt = gt * 255
     gt = gt.to(torch.uint8)
     p = draw_box(gt, l[0])
     p = p / 255
-    p = visulize_3d(p, 3, 1, save_name="ind_03_label_tight.png")
+    p = visulize_3d(p, 3, 1, save_name="ind_03_label_notight.png")

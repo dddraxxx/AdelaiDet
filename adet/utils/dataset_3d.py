@@ -259,9 +259,13 @@ class Volumes(Dataset):
         super().__init__()
         self.length = length
         # 10 samples total
-        self.data = [0, 1, 2, 3, 4]  # list(range(100))  # 5, 6, 7, 8, 9]
-        # case236, case297 has no label
-        self.prep_data = list(range(15, 300))
+        self.data = list(range(240))  # [0, 1, 2, 3, 4] 5, 6, 7, 8, 9]
+        if 236 in self.data:
+            self.data.remove(236)
+        if 296 in self.data:
+            self.data.remove(296)
+        # case236, case296 has no label
+        self.prep_data = list(range(0, 300))
         self.crop_size = (128,) * 3
         # self.crop = T.RandSpatialCrop(
         #     (128,128,128), random_center=False, random_size=False
@@ -284,44 +288,45 @@ class Volumes(Dataset):
         label: 1, 6"""
         for i in self.prep_data:
             x, label = self.read_data(i, read_gt=True, preprocess=False)
+            gt = x[1:]
             if len(label) != 0:
-                # l = label[[0]]
-                # length = l[:, [3, 4, 5]] - l[:, [0, 1, 2]]
-                # print(length)
-                data, label = self.preprocess(x[:1], label)
-                # data = x[:1]
+                # data, label = self.preprocess(x[:1], label)
+                data, gt, label = self.preprocess(x, label, include_gt=True)
                 assert data.dim() == 4, label.dim() == 2
-                # print(x.shape, label.shape)
             else:
                 data = x[0][None]
             dest = pa(save_path) / "{:05d}.pt".format(i)
-            torch.save({"data": data, "label": label, "gt": x[1:]}, dest)
-            print("save to {}".format(dest))
+            torch.save({"data": data, "label": label, "gt": gt}, dest)
+            print("{}: save to {}".format(i, dest))
 
-    def preprocess(self, data, label):
+    def preprocess(self, data, label, include_gt=False):
         """
         Get the most left label and resize_crop it to crop_size
         data: 1, S, H, W
-        gt: 1, S, H, W
+        gt (binary mask): 1, S, H, W
         label: N, 6"""
-        # normalize it
-        from dataset_2d import PyTMinMaxScalerVectorized
+        # pick the most left one
+        l = label[[0]].long()
 
-        print(data.shape, data.min(), data.view(-1).mode())
-        # assert data.min()%1024==0
-        # coord = tuple((data[..., 0] == -1024).nonzero()[0]) + (0,)
-        # assert data[coord] % 1024==0
+        from visualize_niigz import PyTMinMaxScalerVectorized
+
+        if include_gt:
+            gt = data[1:]
+            c = l[0]
+            zs = torch.zeros_like(gt)
+            zs[..., c[0] : c[3], c[1] : c[4], c[2] : c[5]] = 1
+            gt = gt * zs
+            data = data[:1]
+        if not include_gt:
+            gt = data.new_zeros(data.shape)
+            gt[:, l[0, 0] : l[0, 3], l[0, 1] : l[0, 4], l[0, 2] : l[0, 5]] = 1
+
+        # normalize it
+        # print(data.shape, data.min(), data.view(-1).mode())
         data = self.normalizer(data)
         data.clamp_(-3, 3)
         data = PyTMinMaxScalerVectorized()(data, 3)
         bkgr_value = data.min()
-        # bkgr_value = data[coord]
-
-        # pick the most left one
-        l = label[[0]].long()
-
-        gt = data.new_zeros(data.shape)
-        gt[:, l[0, 0] : l[0, 3], l[0, 1] : l[0, 4], l[0, 2] : l[0, 5]] = 1
 
         # print(gt.shape, l)
 
@@ -347,7 +352,6 @@ class Volumes(Dataset):
         )[0]
         rs_gt = rs_gt > 0.5
 
-        # print(rs_gt.unique(), rs_data.shape, factor)
         # # Crop it to crop_size containing the label area
         # (start,end, start,end, ...)
         rs_l = torch.from_numpy(T.BoundingRect()(rs_gt)[0])
@@ -381,11 +385,13 @@ class Volumes(Dataset):
         # print(cr_data.shape, cr_gt.shape)
         cr_l = T.BoundingRect()(cr_gt)[0][[0, 2, 4, 1, 3, 5]]
         # print(cr_l)
+        if include_gt:
+            return cr_data, cr_gt, cr_l
         return cr_data, cr_l
 
     def read_data(self, ind, read_gt=False, transpose=False, preprocess=True):
         """
-        Normalize + crop...
+        Read from nii.gz files. Old version -- normalize + crop...
         data: 1*S*H*W
         label: 1*6"""
         data = read_volume(dpath.format(ind))[0][None]
@@ -403,7 +409,7 @@ class Volumes(Dataset):
         if transpose:
             # Transpose shape to make each slice same size
             data = torch.einsum("...shw->...wsh", data)
-            labels = labels[..., [2, 0, 1, 5, 3, 4]]
+            labels = labels[..., [2, 0, 1, 5, 3, 4]] if len(labels) else labels
 
         # Try to make data smaller to
         if self.crop_size and preprocess:
@@ -458,6 +464,7 @@ class Volumes(Dataset):
     def get_data(self, index, read_gt=False):
         """
         data: 1, S, H, W
+        gt: 1, S, H, W
         label: 1, 6"""
         dct = torch.load(self.datapath.format(index))
         x, labels = dct["data"], dct["label"]
@@ -476,12 +483,15 @@ class Volumes(Dataset):
         # x, labels = self.read_data(index)
 
         # New way
-        x, labels = self.get_data(index)
+        # x, labels = self.get_data(index)
+        x, labels, gt = self.get_data(index, read_gt=True)
+        # print('using im_id {}'.format(index))
         # print(x.shape, labels)
         gt_instance = Instances((0, 0))
         gt_boxes = Boxes3D(labels)
         gt_instance.gt_boxes = gt_boxes
         gt_instance.gt_classes = torch.zeros(1).long()
+        gt_instance.gt_masks = gt
 
         # print(x.shape)
         # size = dict(height=128, width=128, depth=128)
@@ -531,37 +541,44 @@ if __name__ == "__main__":
     # print(len(all_l))
     d = Volumes(10)
     print("start")
-    # d._prepare_data()
+    d._prepare_data()
     # d._prepare_data(save_path=d.orig_datapath[:-9])
     # d.datapath = d.orig_datapath
-    mi = 1
-    for i in range(300):
-        _, l = d.read_data(i, preprocess=False, read_gt=True)
-        # _, l = d.get_data(i)
-        print(l)
-        la = (l[0,3:] - l[0,:3]).prod()
-        ga = (_[1] == 1 ).sum()
-        print(la, ga, ga / la)
+
+    # mi = 1
+    # for i in d.data:
+        # _, l = d.read_data(i, preprocess=False, read_gt=True)
+        # gt = _[1]
+        # _, l, gt = d.get_data(i, read_gt=True)
+        # print(i, l)
+        # assert len(l.view(-1)) > 0
+        # la = (l[0, 3:] - l[0, :3]).prod()
+        # ga = (gt == 1).sum()
+        # print(la, ga, ga / la)
 
     # print(_.view(-1).mode())
     # print(l[:, [3, 4, 5]] - l[:, [0, 1, 2]], _.shape)
 
     # visualize
-    from demo.visualize_niigz import draw_box, visulize_3d, PyTMinMaxScalerVectorized
+    from adet.utils.visualize_niigz import (
+        draw_box,
+        visulize_3d,
+        PyTMinMaxScalerVectorized,
+    )
 
     # v1
-    data, lb = d.read_data(65, read_gt=True, preprocess=False)
-    lb = lb[[0]]
-    print("normalize")
-    data = d.normalizer(data)
-    data.clamp_(-3, 3)
-    data = (PyTMinMaxScalerVectorized()(data[0], 3) * 255).to(torch.uint8)
-    gt = data[1]
+    # data, lb = d.read_data(0, read_gt=True, preprocess=False)
+    # lb = lb[[0]]
+    # print("normalize")
+    # data = d.normalizer(data)
+    # data.clamp_(-3, 3)
+    # data = (PyTMinMaxScalerVectorized()(data[0], 3) * 255).to(torch.uint8)
+    # gt = data[1]
     # v2
-    # data, lb, gt = d.get_data(1, read_gt=True)
-    # data = (data[0] * 255).to(torch.uint8)
-
+    data, lb, gt = d.get_data(0, read_gt=True)
+    data = (data[0] * 255).to(torch.uint8)
     gt = gt[0]
+
     print("get_data")
     lb = lb.int()
     lb2 = lb[:, [1, 2, 4, 5]].repeat(data.size(0), 1)
@@ -569,9 +586,9 @@ if __name__ == "__main__":
     lb2[lb[0, 3] :] = 0
     # show label in data
     p = draw_box(data[lb[0, 0] : lb[0, 3], None], lb2[lb[0, 0] : lb[0, 3]])
-    # p = draw_box(data[:, None], lb2)
+    p = draw_box(data[:, None], lb2)
     # demo_plot(data[1].numpy(), lb)
-    visulize_3d(p / 255, 5, 10, save_name="01data_3d.png")
+    visulize_3d(p / 255, 3, 5, save_name="01data_3d.png")
     # show color bar
     # p = data[lb[0, 0] : lb[0, 3]].float()
     # p = visulize_3d(p , 5, 10)
@@ -580,11 +597,12 @@ if __name__ == "__main__":
     # plt.colorbar()
     # plt.savefig('01data_3d.png')
 
-    # gt = gt * 255
-    # gt = gt.to(torch.uint8)
-    # p = draw_box(gt[lb[0, 0] : lb[0, 3], None], lb2[lb[0, 0] : lb[0, 3]])
-    # p = p / 255
-    # p = visulize_3d(p, 3, 5, save_name="01gt_3d.png")
+    gt = gt * 255
+    gt = gt.to(torch.uint8)
+    p = draw_box(gt[lb[0, 0] : lb[0, 3], None], lb2[lb[0, 0] : lb[0, 3]])
+    p = draw_box(gt[:, None], lb2)
+    p = p / 255
+    p = visulize_3d(p, 3, 5, save_name="01gt_3d.png")
 
     # check shape
     # for i in range(10):
