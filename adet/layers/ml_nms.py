@@ -53,9 +53,9 @@ def ml_nms3d(
     keep = monai_nms(boxes, scores, labels, nms_thresh)
     if max_proposals > 0:
         keep = keep[:max_proposals]
-    print(boxlist)
-    print(keep)
+    # print(keep)
     boxlist = boxlist[keep]
+    print(boxlist)
     return boxlist
 
 

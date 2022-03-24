@@ -20,7 +20,7 @@ from adet.utils.volume_utils import read_niigz
 from detectron2.config import CfgNode
 
 from adet.utils.dataset_3d import Volumes, read_volume, save_volume
-from visualize_niigz import PyTMinMaxScalerVectorized, visulize_3d, draw_3d_box_on_vol
+from adet.utils.visualize_niigz import PyTMinMaxScalerVectorized, visulize_3d, draw_3d_box_on_vol
 
 # constants
 WINDOW_NAME = "COCO detections"
@@ -88,6 +88,8 @@ def get_parser():
     )
     return parser
 
+def save_niigz(batch):
+    
 
 if __name__ == "__main__":
     mp.set_start_method("spawn", force=True)
@@ -117,7 +119,7 @@ if __name__ == "__main__":
             )
             ds = Volumes(1)
             # ds[path]
-            img, lab, gt = ds.get_data(2, read_gt=True)
+            img, lab, gt = ds.get_data(0, read_gt=True)
             header = ds.header
             # with open('gt_boxes.txt', 'w') as fout:
             #     fout.write(str(lab))
@@ -130,9 +132,10 @@ if __name__ == "__main__":
 
             # save_volume('input1.nii.gz', img[0], header)
             img = normalizer(img)
-            img_n = PyTMinMaxScalerVectorized()(img)
+            img_n = PyTMinMaxScalerVectorized()(img, dim=3)
             # PyTMinMaxScalerVectorized()(img.float())[0]
-            visulize_3d(draw_3d_box_on_vol(img_n, lab), save_name="01data_3d.png")
+            visulize_3d(draw_3d_box_on_vol(img_n, lab), 3, 5, save_name="0inst_data_3d_all.png")
+            print('label is: {}'.format(lab))
             img = img.numpy()
 
             start_time = time.time()
@@ -149,18 +152,19 @@ if __name__ == "__main__":
             tmp = pred_msks.amax(dim=[0, 2, 3])
             low, high = tmp.nonzero()[[0, -1]].squeeze().tolist()
 
-            lab[0, 0] = 1
-            lab[0, 3] = (high + 2 - low) // dst
+            lab[0, 0] = max(lab[0,0]-low, 0)
+            hc = min(high, lab[0,3])
+            lab[0, 3] = (hc + 1 - low) // dst
             visulize_3d(
-                draw_3d_box_on_vol(img_n[:, low - 1 : high + 1 : dst], lab),
+                draw_3d_box_on_vol(img_n[:, low : high + 1 : dst], lab),
                 inter_dst=1,
-                save_name="01data_3d_0.png",
+                save_name="0inst_data_3d_0.png",
             )
 
             print(low, high)
-            d = img_n[0][low - 1 : high + 1 : dst]
+            d = img_n[0][low : high + 1 : dst]
             for i, p in enumerate([pred_msks.cpu()[:3]]):
-                p = p[:, low - 1 : high + 1 : dst].transpose(0, 1)
+                p = p[:, low : high + 1 : dst].transpose(0, 1)
                 res = []
                 for d1, p1 in zip(d, p):
                     res.append(
@@ -174,7 +178,7 @@ if __name__ == "__main__":
                 visulize_3d(
                     torch.stack(res) / 255,
                     inter_dst=1,
-                    save_name="01pred_3d_{}.png".format(i),
+                    save_name="0inst_pred_3d_{}.png".format(i),
                 )
 
             logger.info(
