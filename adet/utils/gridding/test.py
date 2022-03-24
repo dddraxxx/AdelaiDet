@@ -2,9 +2,10 @@ import os
 import sys
 import torch
 import torch.nn.functional as F
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir)))
+# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir)))
 
-from tools.gridding import GriddingReverse
+from adet.utils.gridding import GriddingReverse
+from adet.utils.chamfer_distance import ChamferDistance
 
 def sample_gumbel(shape, eps=1e-20):
     U = torch.rand(shape)
@@ -38,13 +39,21 @@ def gumbel_softmax(logits, temperature=1, hard=False):
 if __name__ == '__main__':
     x = torch.rand(2, 3, 3, 3).cuda()
     x.requires_grad = True
-    x = x.unsqueeze(-1)
-    x = torch.cat([x, 1 - x], dim=-1)
-    x = gumbel_softmax(x, hard=True)
+    xx = x.unsqueeze(-1)
+    xx = torch.cat([xx, 1 - xx], dim=-1)
+    xx = gumbel_softmax(xx, hard=True)
 
-    model = GriddingReverse(2)
-    pc = model(x[:, :, :, :, 0].contiguous())
-    print(pc.shape, pc.max(), pc.min())
+    model = GriddingReverse(3).cuda()
+    pc = model(xx[:, :, :, :, 0].contiguous())
+    # print(pc.shape, pc.max(), pc.min())
+    label = (torch.randn(pc.shape).cuda() + 1) / 2.
+
+    loss_func = ChamferDistance().cuda()
+    print(pc.shape, label.shape)
     print(pc)
-    print(x[:, :, :, :, 0] )
+    loss = loss_func(pc, label)
+    print(loss.requires_grad)
+    loss.backward()
+    print(x.grad)
+
 

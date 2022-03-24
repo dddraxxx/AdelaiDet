@@ -4,16 +4,15 @@
 # @Last Modified by:   Haozhe Xie
 # @Last Modified time: 2019-12-30 09:55:53
 # @Email:  cshzxie@gmail.com
-
 import torch
 
-import gridding
+import gridding as gr
 
 
 class GriddingFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, scale, ptcloud):
-        grid, grid_pt_weights, grid_pt_indexes = gridding.forward(-scale, scale - 1, -scale, scale - 1, -scale,
+        grid, grid_pt_weights, grid_pt_indexes = gr.forward(-scale, scale - 1, -scale, scale - 1, -scale,
                                                                   scale - 1, ptcloud)
         # print(grid.size())             # torch.Size(batch_size, n_grid_vertices)
         # print(grid_pt_weights.size())  # torch.Size(batch_size, n_pts, 8, 3)
@@ -25,7 +24,7 @@ class GriddingFunction(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_grid):
         grid_pt_weights, grid_pt_indexes = ctx.saved_tensors
-        grad_ptcloud = gridding.backward(grid_pt_weights, grid_pt_indexes, grad_grid)
+        grad_ptcloud = gr.backward(grid_pt_weights, grid_pt_indexes, grad_grid)
         # print(grad_ptcloud.size())   # torch.Size(batch_size, n_pts, 3)
 
         return None, grad_ptcloud
@@ -51,7 +50,7 @@ class Gridding(torch.nn.Module):
 class GriddingReverseFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, scale, grid):
-        ptcloud = gridding.rev_forward(scale, grid)
+        ptcloud = gr.rev_forward(scale, grid)
         ctx.save_for_backward(torch.Tensor([scale]), grid, ptcloud)
         return ptcloud
 
@@ -59,7 +58,7 @@ class GriddingReverseFunction(torch.autograd.Function):
     def backward(ctx, grad_ptcloud):
         scale, grid, ptcloud = ctx.saved_tensors
         scale = int(scale.item())
-        grad_grid = gridding.rev_backward(ptcloud, grid, grad_ptcloud)
+        grad_grid = gr.rev_backward(ptcloud, grid, grad_ptcloud)
         grad_grid = grad_grid.view(-1, scale, scale, scale)
         return None, grad_grid
 

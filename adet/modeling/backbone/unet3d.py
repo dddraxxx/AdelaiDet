@@ -38,6 +38,9 @@ from adet.modeling.condinst.dynamic_mask_head import (
 from fvcore.nn import sigmoid_focal_loss_jit
 from adet.utils.comm import reduce_mean
 
+from adet.utils.gridding import GriddingReverse
+from adet.utils.chamfer_distance import ChamferDistance
+
 INF = 100000000
 
 
@@ -179,7 +182,6 @@ def build_unet3d(cfg, input_shape):
     backbone = unet3d(cfg, input_shape, base_channel=base_channel)
     return backbone
 
-
 def make_conv(in_channels, out_channels, repeated=3):
     mods = []
     for _ in range(repeated):
@@ -190,7 +192,6 @@ def make_conv(in_channels, out_channels, repeated=3):
         ]
         in_channels = out_channels
     return mods
-
 
 def compute_ctrness_targets_3d(reg_targets):
     if len(reg_targets) == 0:
@@ -205,6 +206,35 @@ def compute_ctrness_targets_3d(reg_targets):
         * (near_far.min(dim=-1)[0] / near_far.max(dim=-1)[0])
     )
     return torch.sqrt(ctrness)
+
+def sample_gumbel(shape, eps=1e-20):
+    U = torch.rand(shape)
+    U = U.cuda()
+    return -torch.log(-torch.log(U + eps) + eps)
+
+def gumbel_softmax_sample(logits, temperature=1):
+    y = logits + sample_gumbel(logits.size())
+    return F.softmax(y / temperature, dim=-1)
+
+def gumbel_softmax(logits, temperature=1, hard=False):
+    """
+    ST-gumple-softmax
+    input: [*, n_class]
+    return: flatten --> [*, n_class] an one-hot vector
+    """
+    y = gumbel_softmax_sample(logits, temperature)
+
+    if not hard:
+        return y
+
+    shape = y.size()
+    _, ind = y.max(dim=-1)
+    y_hard = torch.zeros_like(y).view(-1, shape[-1])
+    y_hard.scatter_(1, ind.view(-1, 1), 1)
+    y_hard = y_hard.view(*shape)
+    # Set gradients w.r.t. y_hard gradients w.r.t. y
+    y_hard = (y_hard - y).detach() + y
+    return y_hard
 
 
 @PROPOSAL_GENERATOR_REGISTRY.register()
@@ -240,6 +270,18 @@ class MaskHead(nn.Module):
         self.bbox_tower = nn.Sequential(*make_conv(256, 64, repeated=4))
         self.ctrness = nn.Conv3d(64, 1, 3, 1, 1)
         self.reg = nn.Conv3d(64, 6, 1, 1)
+
+        self.shape_enabled = True
+        self.chamfer_dist = ChamferDistance()
+        self.grid_rev = GriddingReverse(64)
+        self.label_pc = []
+        template_path = '../adet/utils/gridding/template_pc'
+        with open(template_path, 'r') as f:
+            for line in f:
+                infos = [float(x) for x in line.split(' ')]
+                self.label_pc.append(infos)
+        self.label_pc = torch.tensor(self.label_pc).cuda()
+
 
         for modules in [
             self.cls_tower,
@@ -480,6 +522,14 @@ class MaskHead(nn.Module):
             mask_logits = pixpred
             mask_scores = mask_logits.sigmoid()
 
+            loss_pc = 0
+            if self.shape_enabled:
+                pred = pixpred.unsqueeze(-1)
+                pred = torch.cat([pred, 1 - pred], dim=-1)
+                pred = gumbel_softmax(pred, hard=True)
+                pred_pc = self.grid_rev(pred[:, :, :, :, 0].contiguous())
+                loss_pc = self.chamfer_dist(pred_pc, self.label_pc)
+
             if self.boxinst_enabled:
                 # box-supervised BoxInst losses
                 image_color_similarity = torch.cat(
@@ -507,9 +557,10 @@ class MaskHead(nn.Module):
                     {
                         "loss_prj": loss_prj_term,
                         "loss_pairwise": loss_pairwise,
+                        "loss_pc": loss_pc,
                     }
                 )
-                # print(losses)
+
                 return mask_scores, losses
         else:
             seg_in = list(features.values())[0]
@@ -534,7 +585,6 @@ def compute_project_term_3d(mask_scores, gt_bitmasks):
         mask_scores.max(dim=4, keepdim=True)[0], gt_bitmasks.max(dim=4, keepdim=True)[0]
     )
     return (mask_losses_x + mask_losses_y + mask_losses_z).mean()
-
 
 def compute_pairwise_term_3d(mask_logits, pairwise_size, pairwise_dilation):
     assert mask_logits.dim() == 5
@@ -566,7 +616,6 @@ def compute_pairwise_term_3d(mask_logits, pairwise_size, pairwise_dilation):
 
     # loss = -log(prob)
     return -log_same_prob[:, 0]
-
 
 def compute_ious_3d(pred, target):
     """
@@ -613,17 +662,17 @@ def compute_ious_3d(pred, target):
     g_s_intersect = torch.max(pred_n, target_n) + torch.max(pred_f, target_f)
     ac_uion = g_w_intersect * g_h_intersect * g_s_intersect
 
-    print("pred :{}".format(pred))
-    print("target :{}".format(target))
+    # print("pred :{}".format(pred))
+    # print("target :{}".format(target))
 
     area_intersect = w_intersect * h_intersect * s_intersect
     area_union = target_aera + pred_area - area_intersect
 
-    print("target_area: {}".format(target_aera))
-    sht = locals()
-    printde = lambda x: print("{}: {}".format(x, sht[x]))
-    printde('pred_area')
-    printde('area_intersect')
+    # print("target_area: {}".format(target_aera))
+    # sht = locals()
+    # printde = lambda x: print("{}: {}".format(x, sht[x]))
+    # printde('pred_area')
+    # printde('area_intersect')
 
     ious = (area_intersect + 1.0) / (area_union + 1.0)
     gious = ious - (ac_uion - area_union) / ac_uion
