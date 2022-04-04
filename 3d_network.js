@@ -164,19 +164,17 @@ UInst3D(
         (2): ReLU(inplace=True)
       )
     )
-    (tower): Sequential()
-    (ups): Sequential(
-      (0): Conv3d(32, 32, kernel_size=(1, 1, 1), stride=(1, 1, 1))
-    )
-    (seg_head): Sequential(
+    (tower): Sequential(
       (0): Sequential(
         (0): Conv3d(32, 32, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1), bias=False)
         (1): BatchNorm3d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
         (2): ReLU(inplace=True)
       )
     )
-    (logits): Conv3d(32, 1, kernel_size=(1, 1, 1), stride=(1, 1, 1))
+    (ups): Sequential(
+      (0): Conv3d(32, 8, kernel_size=(1, 1, 1), stride=(1, 1, 1))
+    )
   )
-  (controller): Conv3d(128, 369, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+  (controller): Conv3d(128, 177, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
 )
-model size: 65.327MB
+model size: 62.792MB

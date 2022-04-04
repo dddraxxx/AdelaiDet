@@ -456,9 +456,10 @@ class FCOSOutputs3D(nn.Module):
         losses["loss_fcos_cls"] = class_loss * self.loss_weight_cls
 
         # 2. compute the box regression and quality loss
-        # print('total inds: {}'.format(instances.gt_inds.unique()))
+        print('total inds: {}'.format(instances.gt_inds.unique()))
         instances = instances[pos_inds]
         instances.pos_inds = pos_inds
+        print('it contains gt_inds {}'.format(instances.gt_inds))
         print('from fcos_output3d, positve logits_pred {}'.format(instances.logits_pred[:10].detach().cpu().numpy()[:, 0]))
 
 
@@ -475,7 +476,6 @@ class FCOSOutputs3D(nn.Module):
             # instances = instances[ctr_inds]
             # ctrness_targets = 
             print('from fcos_output3d, ctrness_target is {}'.format(ctrness_targets.sort(descending=True)[0].cpu().numpy()))
-            # print('and it contains gt_inds {}'.format(instances.gt_inds))
 
             # ious, gious = ious[ctrness_targets>0.7], gious[ctrness_targets>0.7]
             # wctrness = ctrness_targets[ctrness_targets>0.7]

@@ -60,7 +60,7 @@ from adet.utils.dataset_3d import Copier, get_dataset, Boxes3D
 from adet.utils.dataset_2d import get_dataset2d
 from adet.utils.nnunet_generator import nnUNet_loader
 from ValidateHook import build_val_hook
-os.environ['CUDA_VISIBLE_DEVICES'] = '7'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 class random3D(Dataset):
     def __init__(self, length):
@@ -162,7 +162,7 @@ class Trainer(DefaultTrainer):
                 self.before_step()
                 self.run_step()
                 self.after_step()
-                torch.cuda.empty_cache()
+                # torch.cuda.empty_cache()
             self.after_train()
 
     def train(self):

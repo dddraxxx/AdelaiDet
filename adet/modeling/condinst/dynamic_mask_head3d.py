@@ -4,7 +4,7 @@ import torch
 from torch.nn import functional as F
 from torch import nn
 
-from adet.utils.gridding import GriddingReverse, remove_zero
+from adet.utils.gridding import GriddingReverse # remove_zero
 from adet.utils.chamfer_distance import ChamferDistance
 
 from adet.utils.comm import (
@@ -268,18 +268,18 @@ class DynamicMaskHead3D(nn.Module):
         self.down_iter = cfg.MODEL.BOXINST.AREA_LOSS.DOWN_ITER
         self.max_iter = cfg.SOLVER.MAX_ITER
         
-        self.gumbel_enabled = True
+        self.gumbel_enabled = False
 
-        self.shape_enabled = True
-        self.chamfer_dist = ChamferDistance().cuda()
-        self.grid_rev = GriddingReverse(64)
-        self.label_pc = []
-        template_path = '/home/duhao/workspace/projects/AdelaiDet/adet/utils/gridding/template_pc'
-        with open(template_path, 'r') as f:
-            for line in f:
-                infos = [float(x) for x in line.split(' ')]
-                self.label_pc.append(infos)
-        self.label_pc = torch.tensor(self.label_pc).cuda().unsqueeze(0).contiguous()
+        # self.shape_enabled = True
+        # self.chamfer_dist = ChamferDistance().cuda()
+        # self.grid_rev = GriddingReverse(64)
+        # self.label_pc = []
+        # template_path = '/home/duhao/workspace/projects/AdelaiDet/adet/utils/gridding/template_pc'
+        # with open(template_path, 'r') as f:
+        #     for line in f:
+        #         infos = [float(x) for x in line.split(' ')]
+        #         self.label_pc.append(infos)
+        # self.label_pc = torch.tensor(self.label_pc).cuda().unsqueeze(0).contiguous()
 
         weight_nums, bias_nums = [], []
         for l in range(self.num_layers):
