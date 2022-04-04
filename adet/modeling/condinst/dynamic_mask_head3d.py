@@ -1,3 +1,4 @@
+import math
 from sklearn.cluster import get_bin_seeds
 import torch
 from torch.nn import functional as F
@@ -67,13 +68,16 @@ def dice_coefficient(x, target):
 def compute_project_term_3d(mask_scores, gt_bitmasks):
     assert mask_scores.dim() == 5, gt_bitmasks.dim() == 5
     mask_losses_y = dice_coefficient(
-        mask_scores.amax(dim=[2,3], keepdim=True), gt_bitmasks.amax(dim=[2,3], keepdim=True)
+        mask_scores.amax(dim=[2, 3], keepdim=True),
+        gt_bitmasks.amax(dim=[2, 3], keepdim=True),
     )
     mask_losses_x = dice_coefficient(
-        mask_scores.amax(dim=[3,4], keepdim=True), gt_bitmasks.amax(dim=[3,4], keepdim=True)
+        mask_scores.amax(dim=[3, 4], keepdim=True),
+        gt_bitmasks.amax(dim=[3, 4], keepdim=True),
     )
     mask_losses_z = dice_coefficient(
-        mask_scores.amax(dim=[2,4], keepdim=True), gt_bitmasks.amax(dim=[2,4], keepdim=True)
+        mask_scores.amax(dim=[2, 4], keepdim=True),
+        gt_bitmasks.amax(dim=[2, 4], keepdim=True),
     )
     # mask_losses_y = dice_coefficient(
     #     mask_scores.max(dim=2, keepdim=True)[0], gt_bitmasks.max(dim=2, keepdim=True)[0]
@@ -119,19 +123,21 @@ def compute_pairwise_term_3d(mask_logits, pairwise_size, pairwise_dilation):
     return -log_same_prob[:, 0]
 
 
-def compute_area_constraints(mask_logits, bitmasks, thresh):
+def compute_area_constraints(mask_logits, bitmasks, beta, thresh):
     n_inst = mask_logits.size(0)
     mean_area = (mask_logits.sigmoid() * bitmasks).view(n_inst, -1).sum(
         1
     ) / bitmasks.view(n_inst, -1).sum(1)
     # print(mean_area)
     # print(mask_logits.shape, bitmasks.shape)
-    return (thresh - mean_area) ** 3 * (mean_area < thresh)
+    return (thresh - mean_area) ** beta * (mean_area < thresh)
+
 
 def compute_continuity_loss():
     pass
 
-def parse_dynamic_params(params, channels, weight_nums, bias_nums):
+
+def parse_dynamic_params(params, channels, weight_nums, bias_nums, last_channel):
     assert params.dim() == 2
     assert len(weight_nums) == len(bias_nums)
     assert params.size(1) == sum(weight_nums) + sum(bias_nums)
@@ -153,8 +159,8 @@ def parse_dynamic_params(params, channels, weight_nums, bias_nums):
             bias_splits[l] = bias_splits[l].reshape(num_insts * channels)
         else:
             # out_channels x in_channels x 1 x 1
-            weight_splits[l] = weight_splits[l].reshape(num_insts * 1, -1, 1, 1, 1)
-            bias_splits[l] = bias_splits[l].reshape(num_insts)
+            weight_splits[l] = weight_splits[l].reshape(num_insts * last_channel, -1, 1, 1, 1)
+            bias_splits[l] = bias_splits[l].reshape(num_insts * last_channel)
 
     return weight_splits, bias_splits
 
@@ -163,17 +169,58 @@ def build_dynamic_mask_head3d(cfg):
     return DynamicMaskHead3D(cfg)
 
 
+class Upsample(nn.Module):
+    def __init__(
+        self, size=None, scale_factor=None, mode="nearest", align_corners=False
+    ):
+        super(Upsample, self).__init__()
+        self.align_corners = align_corners
+        self.mode = mode
+        self.scale_factor = scale_factor
+        self.size = size
+
+    def forward(self, x):
+        return nn.functional.interpolate(
+            x,
+            size=self.size,
+            scale_factor=self.scale_factor,
+            mode=self.mode,
+            align_corners=self.align_corners,
+        )
+
+
 class DynamicMaskHead3D(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.num_layers = cfg.MODEL.CONDINST.MASK_HEAD.NUM_LAYERS
         self.channels = cfg.MODEL.CONDINST.MASK_HEAD.CHANNELS
         self.in_channels = cfg.MODEL.CONDINST.MASK_BRANCH.OUT_CHANNELS
+        self.upsample_factor = cfg.MODEL.CONDINST.MASK_HEAD.UPSAMPLE_FACTOR
         self.mask_out_stride = cfg.MODEL.CONDINST.MASK_OUT_STRIDE
         self.disable_rel_coords = cfg.MODEL.CONDINST.MASK_HEAD.DISABLE_REL_COORDS
 
         soi = cfg.MODEL.FCOS.SIZES_OF_INTEREST
         self.register_buffer("sizes_of_interest", torch.tensor(soi + [soi[-1] * 2]))
+
+        # self.upsample = []
+        # in_channel = self.upsample_factor
+        # for i in list(range(int(math.log2(self.upsample_factor))))[::-1]:
+        #     out_channel = 2 ** i
+        #     m = [
+        #         nn.Conv3d(in_channel, out_channel, 3, 1, 1),
+        #         nn.InstanceNorm3d(out_channel),
+        #         nn.LeakyReLU(inplace=True),
+        #         Upsample(scale_factor=2, mode='trilinear', align_corners=True)
+        #     ]
+        #     self.upsample += m
+        #     in_channel = out_channel
+        # # No need to have isntnorm and lrelu in last layer
+        # self.upsample = self.upsample[:]
+        # self.upsample = nn.Sequential(*self.upsample)
+        # for l in self.upsample.modules():
+        #     if isinstance(l, (nn.Conv3d, nn.ConvTranspose3d)):
+        #         torch.nn.init.normal_(l.weight, std=0.01)
+        #         torch.nn.init.constant_(l.bias, 0)
 
         # boxinst configs
         self.boxinst_enabled = cfg.MODEL.BOXINST.ENABLED
@@ -186,6 +233,7 @@ class DynamicMaskHead3D(nn.Module):
         #
         self.area_loss_thresh = cfg.MODEL.BOXINST.AREA_LOSS.THRESH
         self.area_loss_weight = cfg.MODEL.BOXINST.AREA_LOSS.WEIGHT
+        self.area_beta = cfg.MODEL.BOXINST.AREA_LOSS.BETA
         self.down_iter = cfg.MODEL.BOXINST.AREA_LOSS.DOWN_ITER
         self.max_iter = cfg.SOLVER.MAX_ITER
 
@@ -198,8 +246,8 @@ class DynamicMaskHead3D(nn.Module):
                     weight_nums.append(self.in_channels * self.channels)
                 bias_nums.append(self.channels)
             elif l == self.num_layers - 1:
-                weight_nums.append(self.channels * 1)
-                bias_nums.append(1)
+                weight_nums.append(self.channels * self.upsample_factor)
+                bias_nums.append(self.upsample_factor)
             else:
                 weight_nums.append(self.channels * self.channels)
                 bias_nums.append(self.channels)
@@ -266,18 +314,21 @@ class DynamicMaskHead3D(nn.Module):
         mask_head_inputs = mask_head_inputs.reshape(1, -1, S, H, W)
 
         weights, biases = parse_dynamic_params(
-            mask_head_params, self.channels, self.weight_nums, self.bias_nums
+            mask_head_params, self.channels, self.weight_nums, self.bias_nums, self.upsample_factor
         )
 
         mask_logits = self.mask_heads_forward(mask_head_inputs, weights, biases, n_inst)
 
-        mask_logits = mask_logits.reshape(-1, 1, S, H, W)
+        mask_logits = mask_logits.reshape(-1, self.upsample_factor, S, H, W)
 
-        assert mask_feat_stride >= self.mask_out_stride
-        assert mask_feat_stride % self.mask_out_stride == 0
-        mask_logits = aligned_bilinear3d(
-            mask_logits, int(mask_feat_stride / self.mask_out_stride)
-        )
+        # assert mask_feat_stride >= self.mask_out_stride
+        assert mask_feat_stride == self.mask_out_stride
+        # assert mask_feat_stride % self.mask_out_stride == 0
+        # mask_logits = aligned_bilinear3d(
+        #     mask_logits, int(mask_feat_stride / self.mask_out_stride)
+        # )
+        # Use transpose convolution to make precise prediction
+        # mask_logits = self.upsample(mask_logits)
 
         return mask_logits
 
@@ -336,15 +387,15 @@ class DynamicMaskHead3D(nn.Module):
                     print(warmup_factor)
                     loss_pairwise = loss_pairwise * warmup_factor
 
-                    area_factor = 1 - (self._iter.item()-self.down_iter) / (self.max_iter - 2000 -self.down_iter)
-                    area_factor = max(min(warmup_factor**2, area_factor), 0)
+                    area_factor = 1 - (self._iter.item() - self.down_iter) / (
+                        self.max_iter - 2000 - self.down_iter
+                    )
+                    area_factor = max(min(warmup_factor ** 2, area_factor), 0)
                     print(area_factor)
                     area_loss = compute_area_constraints(
-                        mask_logits, gt_bitmasks, self.area_loss_thresh
+                        mask_logits, gt_bitmasks, self.area_beta, self.area_loss_thresh
                     )
-                    area_loss = (
-                        area_loss.sum() * self.area_loss_weight * area_factor
-                    )
+                    area_loss = area_loss.sum() * self.area_loss_weight * area_factor
 
                     losses.update(
                         {

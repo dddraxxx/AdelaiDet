@@ -54,8 +54,8 @@ def ml_nms3d(
     if max_proposals > 0:
         keep = keep[:max_proposals]
     # print(keep)
-    boxlist = boxlist[keep]
-    print(boxlist)
+    # boxlist = boxlist[keep]
+    # print(boxlist)
     return boxlist
 
 
@@ -76,7 +76,7 @@ def nms3d(boxes, scores, thresh):
     bx = Boxes3D(boxes)
     l = torch.arange(len(boxes))
     le = len(boxes)
-    print(len(bx))
+    # print(len(bx))
     r, c = torch.meshgrid(l, l, indexing="ij")
     tables = bx.iou(r.reshape(-1), c.reshape(-1)).view(le, le)
     tables = tables < thresh

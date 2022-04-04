@@ -9,8 +9,8 @@ MODEL:
   # WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-BoxInst_5_0.8/model_0009499.pth
   # WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_5_0.96_2dprj/model_0000199.pth
   # WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_100_0.96/model_0000149.pth
-  # WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_100_0.96_area/model_0000199.pth
-  WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_240_0.96_area/model_0000499.pth
+  WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_100_0.96_area/model_0000049.pth
+  WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_240_0.96_area/model_0004999.pth
 
   BACKBONE:
     ANTI_ALIAS: false
@@ -26,7 +26,8 @@ MODEL:
       WARMUP_ITERS: 800
     AREA_LOSS:
       THRESH: 0.4
-      WEIGHT: 0.6
+      WEIGHT: 0.4
+      BETA: 6
       DOWN_ITER: 400
   CONDINST:
     BOTTOM_PIXELS_REMOVED: -1
@@ -98,7 +99,7 @@ MODEL:
 SOLVER:
   AMP:
     ENABLED: false
-  BASE_LR: 0.001
+  BASE_LR: 0.01
   IMS_PER_BATCH: 2
   BIAS_LR_FACTOR: 1.0
   MOMENTUM: 0.9
@@ -114,11 +115,11 @@ SOLVER:
     NORM_TYPE: 2.0
   GAMMA: 0.1
   LR_SCHEDULER_NAME: WarmupMultiStepLR
-  MAX_ITER: 500
+  MAX_ITER: 5000
   REFERENCE_WORLD_SIZE: 0
-  STEPS: [1200, 2400]
+  STEPS: [500, 1200]
   WARMUP_FACTOR: 0.001 # times base_lr in beginning
-  WARMUP_ITERS: 500
+  WARMUP_ITERS: 300
   WARMUP_METHOD: linear
 VERSION: 2
 VIS_PERIOD: 0

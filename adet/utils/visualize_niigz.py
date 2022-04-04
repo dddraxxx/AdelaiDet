@@ -1,20 +1,22 @@
 from matplotlib import pyplot as plt
 import numpy as np
 from adet.utils.dataset_3d import *
-from torchvision.utils import make_grid, save_image, draw_bounding_boxes
+from torchvision.utils import make_grid, save_image, draw_bounding_boxes, draw_segmentation_masks
 from pathlib import Path as pa
 import torch
 
+tt = torch.as_tensor
 
 def draw_box(data, bbox):
     """
     Draw a box for every slice fo data
-    Data: N, C, H, W
+    Data: N, C, H, W (dtype-uint8)
     bbox: N, 4
     return: N, C, H, W
     Note: bbox coord is re-permuted for draw_bounding_box"""
+    data =tt(data)
     dr_data = []
-    for d, b in zip(data, bbox):
+    for d, b in zip(data.cpu(), bbox.cpu()):
         dr_data.append(draw_bounding_boxes(d, b[[1, 0, 3, 2]][None], colors=["red"]))
     return torch.stack(dr_data)
 
@@ -23,6 +25,9 @@ def draw_3d_box_on_vol(data, lb):
     """
     data: 1, S, H, W
     label: 1, 6"""
+    lb = tt(lb)
+    data =tt(data)
+    data = PyTMinMaxScalerVectorized()(data, dim=3)
     data = (data[0] * 255).to(torch.uint8)
     lb = lb.int()
     lb2 = lb[:, [1, 2, 4, 5]].repeat(data.size(0), 1)
@@ -32,11 +37,31 @@ def draw_3d_box_on_vol(data, lb):
     p = draw_box(data[:, None], lb2)
     return p / 255
 
+def draw_seg_on_vol(data, lb, if_norm=True, alpha=0.3):
+    """
+    data: 1, S, H, W
+    label: N, S, H, W (binary value or bool)"""
+    lb = tt(lb).float()
+    data =tt(data).float()
+    if if_norm:
+        data = norm(data, 3)
+    data = (data*255).cpu().to(torch.uint8)
+    res = []
+    for d, l in zip(data.transpose(0,1), lb.cpu().transpose(0,1)):
+        res.append(draw_segmentation_masks(
+                            (d * 255).repeat(3, 1, 1).to(torch.uint8),
+                            l.bool(),
+                            alpha=alpha,
+                            colors=["red", "green", "pink"],
+                        ))
+    return torch.stack(res)/255
+
 
 def visulize_3d(data, width=5, inter_dst=10, save_name=None):
     """
     data: (S, H, W) or (N, C, H, W)"""
-    img = data
+    data =tt(data)
+    img = data.float()
     # st = torch.tensor([76, 212, 226])
     # end = st+128
     # img = img[st[0]:end[0],st[1]:end[1],st[2]:end[2]]
@@ -59,6 +84,8 @@ def save_img(path, width=5, inter_dst=10, save_name=None):
     path = pa(path)
     visulize_3d(img, width, inter_dst, save_name or path.with_suffix(".png"))
 
+def norm(data, dim=3):
+    return PyTMinMaxScalerVectorized()(data, dim=3)
 
 class PyTMinMaxScalerVectorized(object):
     """

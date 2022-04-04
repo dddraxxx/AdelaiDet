@@ -203,6 +203,7 @@ class FCOSHead(nn.Module):
                 if isinstance(l, (nn.Conv2d, nn.Conv3d)):
                     torch.nn.init.normal_(l.weight, std=0.01)
                     torch.nn.init.constant_(l.bias, 0)
+        torch.nn.init.constant_(self.bbox_pred.bias, 0)
 
         # initialize the bias for focal loss
         prior_prob = cfg.MODEL.FCOS.PRIOR_PROB
@@ -228,7 +229,9 @@ class FCOSHead(nn.Module):
             if self.scales is not None:
                 reg = self.scales[l](reg)
             # Note that we use relu, as in the improved FCOS, instead of exp.
-            bbox_reg.append(F.relu(reg))
+            # bbox_reg.append(F.relu(reg))
+            bbox_reg.append(reg.sigmoid()*3-0.75)
+            # bbox_reg.append(torch.exp(reg)/2)
             if top_module is not None:
                 top_feats.append(top_module(bbox_tower))
         return logits, bbox_reg, ctrness, top_feats, bbox_towers

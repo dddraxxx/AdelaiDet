@@ -9,6 +9,7 @@ import cv2
 import torch
 import tqdm
 from torchvision.utils import draw_segmentation_masks
+from torch.utils.data import DataLoader
 
 from detectron2.data.detection_utils import read_image
 from detectron2.utils.logger import setup_logger
@@ -19,8 +20,12 @@ from adet.config import get_cfg
 from adet.utils.volume_utils import read_niigz
 from detectron2.config import CfgNode
 
-from adet.utils.dataset_3d import Volumes, read_volume, save_volume
-from adet.utils.visualize_niigz import PyTMinMaxScalerVectorized, visulize_3d, draw_3d_box_on_vol
+from adet.utils.dataset_3d import Volumes, get_dataset, read_volume, save_volume
+from adet.utils.visualize_niigz import (
+    PyTMinMaxScalerVectorized,
+    visulize_3d,
+    draw_3d_box_on_vol,
+)
 
 # constants
 WINDOW_NAME = "COCO detections"
@@ -88,8 +93,20 @@ def get_parser():
     )
     return parser
 
-def save_niigz(batch):
-    
+
+def pred_batch(batch, model):
+    imgs = [i["image"] for i in batch]
+    gt = [i["instances"].gt_masks.cpu() for i in batch]
+    idx = [i["index"] for i in batch]
+    input = []
+    for i in imgs:
+        depth, height, width = i.shape[-3:]
+        input.append(dict(image=i, depth=depth, height=height, width=width))
+    with torch.no_grad():
+        results = model(input)
+    results = [r["instances"].to("cpu") for r in results]
+    return results, gt, idx
+
 
 if __name__ == "__main__":
     mp.set_start_method("spawn", force=True)
@@ -111,15 +128,39 @@ if __name__ == "__main__":
             args.input = glob.glob(os.path.expanduser(args.input[0]))
             assert args.input, "The input path(s) was not found"
         for path in tqdm.tqdm(args.input, disable=not args.output):
+
+            # now pred cases 240-300
+            # from detectron2.data.build import trivial_batch_collator
+            # pred_ds = get_dataset(60)
+            # pred_ds.data = list(range(240,300))
+            # pred_ds.data.remove(296)
+            # pred_dl = DataLoader(pred_ds, 10, collate_fn= trivial_batch_collator, shuffle=False, pin_memory=True,   num_workers=12, drop_last=False)
+            # res = []
+            # for batch in iter(pred_dl):
+            #     print([i['index'] for i in batch])
+            #     re = pred_batch(batch, demo.predictor.model)
+            #     re = list(zip(*re))
+            #     print(len(re))
+            #     res.extend(re)
+            # from pathlib import Path as pa
+            # dest = pa('pred_fu1')
+            # dest.mkdir(exist_ok=True)
+            # for r in res:
+            #     d = dest / '{:05d}.npy'.format(r[-1])
+            #     print(f'save to {d}')
+            #     torch.save(r, d)
+            # print('finished')
+            # break
+
             # use PIL, to be consistent with evaluation
             # img = read_image(path, format="BGR")
             # modified
+            ds = Volumes(1)
             normalizer = lambda x: (x - x.mean(dim=[1, 2, 3], keepdim=True)) / x.std(
                 dim=[1, 2, 3], keepdim=True
             )
-            ds = Volumes(1)
             # ds[path]
-            img, lab, gt = ds.get_data(0, read_gt=True)
+            img, lab, gt = ds.get_data(1, read_gt=True)
             header = ds.header
             # with open('gt_boxes.txt', 'w') as fout:
             #     fout.write(str(lab))
@@ -134,8 +175,10 @@ if __name__ == "__main__":
             img = normalizer(img)
             img_n = PyTMinMaxScalerVectorized()(img, dim=3)
             # PyTMinMaxScalerVectorized()(img.float())[0]
-            visulize_3d(draw_3d_box_on_vol(img_n, lab), 3, 5, save_name="0inst_data_3d_all.png")
-            print('label is: {}'.format(lab))
+            visulize_3d(
+                draw_3d_box_on_vol(img_n, lab), 5, 5, save_name="0inst_data_3d_all.png"
+            )
+            print("label is: {}".format(lab))
             img = img.numpy()
 
             start_time = time.time()
@@ -152,18 +195,22 @@ if __name__ == "__main__":
             tmp = pred_msks.amax(dim=[0, 2, 3])
             low, high = tmp.nonzero()[[0, -1]].squeeze().tolist()
 
-            lab[0, 0] = max(lab[0,0]-low, 0)
-            hc = min(high, lab[0,3])
-            lab[0, 3] = (hc + 1 - low) // dst
+            lab[0, 0] = max(lab[0, 0] - low + 1, 0) // dst
+            lab[0, 3] = (min(high, lab[0, 3]) + 1 - low) // dst
             visulize_3d(
                 draw_3d_box_on_vol(img_n[:, low : high + 1 : dst], lab),
                 inter_dst=1,
                 save_name="0inst_data_3d_0.png",
             )
+            visulize_3d(
+                draw_3d_box_on_vol(gt[:, low : high + 1 : dst], lab),
+                inter_dst=1,
+                save_name="0inst_gt_3d_0.png",
+            )
 
-            print(low, high)
+            print(low, high, lab)
             d = img_n[0][low : high + 1 : dst]
-            for i, p in enumerate([pred_msks.cpu()[:3]]):
+            for i, p in enumerate([pred_msks.cpu()[:1]]):
                 p = p[:, low : high + 1 : dst].transpose(0, 1)
                 res = []
                 for d1, p1 in zip(d, p):

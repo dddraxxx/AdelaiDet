@@ -58,6 +58,8 @@ import monai.transforms as T
 
 from adet.utils.dataset_3d import Copier, get_dataset, Boxes3D
 from adet.utils.dataset_2d import get_dataset2d
+from adet.utils.nnunet_generator import nnUNet_loader
+from ValidateHook import build_val_hook
 
 class random3D(Dataset):
     def __init__(self, length):
@@ -128,6 +130,10 @@ class Trainer(DefaultTrainer):
                 ret[i] = hooks.PeriodicCheckpointer(
                     self.checkpointer, self.cfg.SOLVER.CHECKPOINT_PERIOD
                 )
+        if self.cfg.VAL.ENABLED:
+            self.val_hook = build_val_hook(self.cfg)
+            self.register_hooks([self.val_hook])
+            self._hooks = self._hooks[:-2] + self._hooks[-2:][::-1]
         return ret
 
     def resume_or_load(self, resume=True):
@@ -185,6 +191,8 @@ class Trainer(DefaultTrainer):
         # return build_detection_train_loader(cfg, mapper=mapper)
         # return DataLoader(random3D(cfg.SOLVER.MAX_ITER), 1, collate_fn=lambda x: x, shuffle=True)
         total_len = cfg.SOLVER.MAX_ITER * cfg.SOLVER.IMS_PER_BATCH * comm.get_world_size()
+        if cfg.DATALOADER.TYPE == 'nnunet':
+            return nnUNet_loader(cfg)
         if '3d' not in cfg.MODEL.META_ARCHITECTURE.lower() and len(cfg.MODEL.PIXEL_MEAN)==3:
             return DataLoader(get_dataset2d(total_len), cfg.SOLVER.IMS_PER_BATCH, collate_fn=lambda x: x, shuffle=True, pin_memory=True,   num_workers=cfg.SOLVER.IMS_PER_BATCH+8)
         return DataLoader(get_dataset(total_len), cfg.SOLVER.IMS_PER_BATCH, collate_fn= trivial_batch_collator, shuffle=True, pin_memory=True,   num_workers=cfg.SOLVER.IMS_PER_BATCH+8)
@@ -292,6 +300,12 @@ def main(args):
             [hooks.EvalHook(0, lambda: trainer.test_with_TTA(cfg, trainer.model))]
         )
     print(trainer._trainer.model, file=open("3d_network.js", "w"))
+    model = trainer._trainer.model
+    total_params = sum(p.nelement()*p.element_size() for p in model.parameters())
+    total_buff = sum(b.nelement()*b.element_size() for b in model.buffers())
+    size_all_mb = (total_params + total_buff)/ 1024**2
+    print('model size: {:.3f}MB'.format(size_all_mb), file=open("3d_network.js", "a"))
+
     return trainer.train()
 
 

@@ -7,6 +7,7 @@ import torch.nn.functional as F
 
 from fvcore.nn import sigmoid_focal_loss_jit
 from detectron2.layers import ShapeSpec
+from adet.modeling.condinst.dynamic_mask_head3d import Upsample
 
 from adet.utils.comm import aligned_bilinear, aligned_bilinear3d
 
@@ -79,7 +80,11 @@ class MaskBranch3D(nn.Module):
         norm = cfg.MODEL.CONDINST.MASK_BRANCH.NORM
         num_convs = cfg.MODEL.CONDINST.MASK_BRANCH.NUM_CONVS
         channels = cfg.MODEL.CONDINST.MASK_BRANCH.CHANNELS
-        self.out_stride = input_shape[self.in_features[0]].stride
+        self.input_stride = input_shape[self.in_features[0]].stride
+        self.up_conv_layers = cfg.MODEL.CONDINST.MASK_BRANCH.UP_CONVS
+        self.out_stride = self.input_stride / 2 ** self.up_conv_layers
+
+        self.only_seg = cfg.MODEL.CONDINST.ONLY_SEG
 
         feature_channels = {k: v.channels for k, v in input_shape.items()}
 
@@ -92,21 +97,32 @@ class MaskBranch3D(nn.Module):
         tower = []
         for i in range(num_convs):
             tower.append(conv_block(channels, channels, 3, 1))
-        tower.append(nn.Conv3d(channels, max(self.num_outputs, 1), 1))
         self.add_module("tower", nn.Sequential(*tower))
 
-        if self.sem_loss_on:
+        ups = []
+        last_ch = channels
+        for i in range(self.up_conv_layers):
+            m = [
+                Upsample(scale_factor=2, mode="trilinear", align_corners=True),
+                conv_block(channels // 2 ** i, channels // 2 ** (i + 1), 3, 1, 1),
+            ]
+            ups += m
+            last_ch = channels // (2 ** (i + 1))
+        ups.append(nn.Conv3d(last_ch, max(self.num_outputs, 1), 1))
+        self.add_module("ups", nn.Sequential(*ups))
+
+        if self.only_seg:
             num_classes = cfg.MODEL.FCOS.NUM_CLASSES
             self.focal_loss_alpha = cfg.MODEL.FCOS.LOSS_ALPHA
             self.focal_loss_gamma = cfg.MODEL.FCOS.LOSS_GAMMA
 
-            in_channels = feature_channels[self.in_features[0]]
+            in_channels = self.num_outputs
             self.seg_head = nn.Sequential(
-                conv_block(in_channels, channels, kernel_size=3, stride=1),
-                conv_block(channels, channels, kernel_size=3, stride=1),
+                # conv_block(in_channels, in_channels, kernel_size=3, stride=1),
+                conv_block(in_channels, in_channels, kernel_size=3, stride=1),
             )
 
-            self.logits = nn.Conv3d(channels, num_classes, kernel_size=1, stride=1)
+            self.logits = nn.Conv3d(in_channels, num_classes, kernel_size=1, stride=1)
 
             prior_prob = cfg.MODEL.FCOS.PRIOR_PROB
             bias_value = -math.log((1 - prior_prob) / prior_prob)
@@ -130,6 +146,7 @@ class MaskBranch3D(nn.Module):
                 x = x + x_p
 
         mask_feats = self.tower(x)
+        mask_feats = self.ups(x)
 
         if self.num_outputs == 0:
             mask_feats = mask_feats[:, : self.num_outputs]

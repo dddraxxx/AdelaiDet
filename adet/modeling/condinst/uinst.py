@@ -17,7 +17,10 @@ from detectron2.structures.masks import PolygonMasks, polygons_to_bitmask
 from detectron2.layers.wrappers import shapes_to_tensor
 
 from adet.modeling.condinst.condinst3d import get_images_color_similarity_3d
-from adet.modeling.condinst.dynamic_mask_head3d import build_dynamic_mask_head3d
+from adet.modeling.condinst.dynamic_mask_head3d import (
+    build_dynamic_mask_head3d,
+    dice_coefficient,
+)
 from adet.modeling.condinst.mask_branch3d import build_mask_branch3d
 
 from .dynamic_mask_head import build_dynamic_mask_head
@@ -69,6 +72,7 @@ def get_images_color_similarity(images, image_masks, kernel_size, dilation):
     unfolded_weights = torch.max(unfolded_weights, dim=1)[0]
 
     return similarity * unfolded_weights
+
 
 class ImageList3D(object):
     """
@@ -142,7 +146,8 @@ class ImageList3D(object):
 
         image_sizes = [(im.shape[-3], im.shape[-2], im.shape[-1]) for im in tensors]
         image_sizes_tensor = [shapes_to_tensor(x) for x in image_sizes]
-        return ImageList(torch.stack(tensors,dim=0), image_sizes_tensor)
+        return ImageList(torch.stack(tensors, dim=0), image_sizes_tensor)
+
 
 @META_ARCH_REGISTRY.register()
 class UInst3D(nn.Module):
@@ -195,9 +200,12 @@ class UInst3D(nn.Module):
         # )
         self.to(self.device)
 
+        self.only_seg = cfg.MODEL.CONDINST.ONLY_SEG
+
     def forward(self, batched_inputs):
         """
         x: dict[ N*C*H*W ]"""
+        # print('batch_length:', len(batched_inputs))
         original_images = [x["image"].to(self.device) for x in batched_inputs]
 
         # normalize images
@@ -210,6 +218,7 @@ class UInst3D(nn.Module):
             images_norm, self.backbone.size_divisibility
         )
 
+        # p_i to p_j
         features = self.backbone(images_norm.tensor)
 
         if "instances" in batched_inputs[0]:
@@ -254,9 +263,33 @@ class UInst3D(nn.Module):
         else:
             gt_instances = None
         mask_feats, sem_losses = self.mask_branch(features, gt_instances)
+
+        if self.only_seg:
+            seg = self.mask_branch.logits(self.mask_branch.seg_head(mask_feats))
+            if self.training:
+                losses = {}
+                gt_bitmasks = torch.stack(
+                    [
+                        i.gt_bitmasks
+                        for i in gt_instances
+                    ]
+                )
+                seg_losses = dice_coefficient(seg.sigmoid(), gt_bitmasks)
+                seg_losses = seg_losses.mean()
+                losses.update(seg_losses=seg_losses)
+                return losses
+            else:
+                results = []
+                for s in seg:
+                    instances = Instances([0,0])
+                    instances.pred_masks = (s.sigmoid()>0.5).float()
+                    results.append({"instances": instances})
+                return results
+
         proposals, proposal_losses = self.proposal_generator(
             images_norm, features, gt_instances, self.controller
         )
+        # torch.cuda.empty_cache()
 
         if self.training:
             mask_losses = self._forward_mask_heads_train(
@@ -279,7 +312,7 @@ class UInst3D(nn.Module):
             for im_id, (input_per_image, image_size) in enumerate(
                 zip(batched_inputs, images_norm.image_sizes)
             ):
-                depth = input_per_image.get('depth', image_size[0])
+                depth = input_per_image.get("depth", image_size[0])
                 height = input_per_image.get("height", image_size[1])
                 width = input_per_image.get("width", image_size[2])
 
@@ -287,7 +320,13 @@ class UInst3D(nn.Module):
                     pred_instances_w_masks.im_inds == im_id
                 ]
                 instances_per_im = self.postprocess(
-                    instances_per_im, depth, height, width, padded_im_s, padded_im_h, padded_im_w
+                    instances_per_im,
+                    depth,
+                    height,
+                    width,
+                    padded_im_s,
+                    padded_im_h,
+                    padded_im_w,
                 )
 
                 processed_results.append({"instances": instances_per_im})
@@ -372,42 +411,31 @@ class UInst3D(nn.Module):
             if not per_im_gt_inst.has("gt_masks"):
                 continue
             start = int(self.mask_out_stride // 2)
-            if isinstance(per_im_gt_inst.get("gt_masks"), PolygonMasks):
-                polygons = per_im_gt_inst.get("gt_masks").polygons
-                per_im_bitmasks = []
-                per_im_bitmasks_full = []
-                for per_polygons in polygons:
-                    bitmask = polygons_to_bitmask(per_polygons, im_h, im_w)
-                    bitmask = torch.from_numpy(bitmask).to(self.device).float()
-                    start = int(self.mask_out_stride // 2)
-                    bitmask_full = bitmask.clone()
-                    bitmask = bitmask[
-                        start :: self.mask_out_stride, start :: self.mask_out_stride
-                    ]
+            bitmasks = per_im_gt_inst.get("gt_masks")  # .tensor
+            s, h, w = bitmasks.size()[1:]
+            # pad to new size
+            bitmasks_full = F.pad(
+                bitmasks,
+                (
+                    0,
+                    im_s - s,
+                    0,
+                    im_h - h,
+                    0,
+                    im_w - w,
+                ),
+                "constant",
+                0,
+            )
+            bitmasks = bitmasks_full[
+                :,
+                start :: self.mask_out_stride,
+                start :: self.mask_out_stride,
+                start :: self.mask_out_stride,
+            ]
+            per_im_gt_inst.gt_bitmasks = bitmasks
+            per_im_gt_inst.gt_bitmasks_full = bitmasks_full
 
-                    assert bitmask.size(0) * self.mask_out_stride == im_h
-                    assert bitmask.size(1) * self.mask_out_stride == im_w
-
-                    per_im_bitmasks.append(bitmask)
-                    per_im_bitmasks_full.append(bitmask_full)
-
-                per_im_gt_inst.gt_bitmasks = torch.stack(per_im_bitmasks, dim=0)
-                per_im_gt_inst.gt_bitmasks_full = torch.stack(
-                    per_im_bitmasks_full, dim=0
-                )
-            else:
-                bitmasks = per_im_gt_inst.get("gt_masks") # .tensor
-                s, h, w = bitmasks.size()[1:]
-                # pad to new size
-                bitmasks_full = F.pad(
-                    bitmasks, (0, im_s -  s, 0, im_h - h, 0, im_w - w, ), "constant", 0
-                )
-                bitmasks = bitmasks_full[
-                    :, start :: self.mask_out_stride, start :: self.mask_out_stride, start::self.mask_out_stride
-                ]
-                per_im_gt_inst.gt_bitmasks = bitmasks
-                per_im_gt_inst.gt_bitmasks_full = bitmasks_full
-    
     def add_bitmasks_from_boxes(self, instances, images, image_masks, im_s, im_h, im_w):
         stride = self.mask_out_stride
         start = int(stride // 2)
@@ -490,7 +518,9 @@ class UInst3D(nn.Module):
             output_height / results.image_size[1],
         )
         resized_im_s, resized_im_h, resized_im_w = results.image_size
-        results = Instances((output_depth, output_height, output_width), **results.get_fields())
+        results = Instances(
+            (output_depth, output_height, output_width), **results.get_fields()
+        )
 
         if results.has("pred_boxes"):
             output_boxes = results.pred_boxes
@@ -510,7 +540,9 @@ class UInst3D(nn.Module):
             assert factor_h == factor_w == factor_s
             factor = factor_h
             pred_global_masks = aligned_bilinear3d(results.pred_global_masks, factor)
-            pred_global_masks = pred_global_masks[:, :, :resized_im_s, :resized_im_h, :resized_im_w]
+            pred_global_masks = pred_global_masks[
+                :, :, :resized_im_s, :resized_im_h, :resized_im_w
+            ]
             pred_global_masks = F.interpolate(
                 pred_global_masks,
                 size=(output_depth, output_height, output_width),

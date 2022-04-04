@@ -1,9 +1,13 @@
-OUTPUT_DIR: training_dir/BoxInst/UNet3D-CondInst-nnunet
+OUTPUT_DIR: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-onlyseg
 CUDNN_BENCHMARK: false
 DATALOADER:
   TYPE: nnunet
 EVAL:
-  SAVE_DIR: ./validation-raw-condinst2
+  SAVE_DIR: ./validation-raw-condinst-fullmask-onlyseg-epo2w
+VAL:
+  ENABLED: true
+  BATCH_NUM: 50
+  PERIOD: 1
 MODEL:
   # WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-BoxInst_10/model_0000699.pth
   # WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-BoxInst_10_1/model_0006299.pth
@@ -14,12 +18,25 @@ MODEL:
   # WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_5_0.96_2dprj/model_0000199.pth
   # WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_100_0.96/model_0009999.pth
   # WEIGHTS: training_dir/BoxInst/UNet3D-CondInst/model_0000999.pth
-  WEIGHTS: training_dir/BoxInst/UNet3D-CondInst-nnunet/model_0019999.pth
-  # WEIGHTS: training_dir/BoxInst/UNet3D-CondInst-nnunet-iou/model_0019999.pth
+  # WEIGHTS: training_dir/BoxInst/UNet3D-CondInst-nnunet/model_0004999.pth
+  # WEIGHTS: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask/model_0019999.pth
+  # WEIGHTS: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-onlyseg/model_0019999.pth
   BACKBONE:
     ANTI_ALIAS: false
     FREEZE_AT: 2
     NAME: build_fcos_unet_fpn_backbone
+  UINST3D:
+    NORMALIZE: false
+  UNETD:
+    BASE_CHANNELS: 16
+    MAX_CHANNELS: 320
+    OUT_FEATURES: [res0, res1, res2, res3, res4]
+    STAGE_NUM: 5
+  FPN:
+    FUSE_TYPE: sum
+    IN_FEATURES:  [res0, res1, res2, res3, res4]
+    NORM: ""
+    OUT_CHANNELS: 64 # 128
   BOXINST:
     BOTTOM_PIXELS_REMOVED: 0
     ENABLED: false
@@ -38,10 +55,10 @@ MODEL:
     BOTTOM_PIXELS_REMOVED: -1
     MASK_BRANCH:
       CHANNELS: 64 # 128
-      IN_FEATURES: [p2, p3, p4]
+      IN_FEATURES: [p0, p1, p2, p3, p4]
       NORM: BN
-      NUM_CONVS: 0
-      UP_CONVS: 2
+      NUM_CONVS: 2
+      UP_CONVS: 0
       OUT_CHANNELS: 8 # 16
       SEMANTIC_LOSS_ON: false
     MASK_HEAD:
@@ -52,12 +69,7 @@ MODEL:
       USE_FP16: false
     MASK_OUT_STRIDE: 1
     MAX_PROPOSALS: -1
-    TOPK_PROPOSALS_PER_IM: 16
-  FPN:
-    FUSE_TYPE: sum
-    IN_FEATURES: [res2, res3, res4] # [res0, res1, res2, res3, res4]
-    NORM: ""
-    OUT_CHANNELS: 64 # 128
+    TOPK_PROPOSALS_PER_IM: 8
   FCOS:
     # seems like an important change
     BOX_QUALITY: iou
@@ -68,7 +80,7 @@ MODEL:
     IN_FEATURES: [p2, p3, p4, p5, p6]
     LOC_LOSS_TYPE: giou
     ## 0.25, 2
-    LOSS_ALPHA: 0.75
+    LOSS_ALPHA: 0.6
     LOSS_GAMMA: 4.0 # Modified to make cls and loc loss decrease simultaneously
     LOSS_NORMALIZER_CLS: fg
     LOSS_WEIGHT_CLS: 1.0
@@ -77,10 +89,10 @@ MODEL:
     NUM_CLASSES: 1
     NUM_CLS_CONVS: 4
     NUM_SHARE_CONVS: 0
-    POST_NMS_TOPK_TEST: 2
+    POST_NMS_TOPK_TEST: 100
     POST_NMS_TOPK_TRAIN: 100
     POS_RADIUS: 1.5
-    PRE_NMS_TOPK_TEST: 20
+    PRE_NMS_TOPK_TEST: 1000
     PRE_NMS_TOPK_TRAIN: 1000
     PRIOR_PROB: 0.01
     SIZES_OF_INTEREST: [8, 16, 32, 64]
@@ -97,13 +109,6 @@ MODEL:
   PROPOSAL_GENERATOR:
     MIN_SIZE: 0
     NAME: FCOS3D
-  UINST3D:
-    NORMALIZE: false
-  UNETD:
-    BASE_CHANNELS: 16
-    MAX_CHANNELS: 320
-    OUT_FEATURES: [res2, res3, res4] # [res0, res1, res2, res3, res4]
-    STAGE_NUM: 5
 SOLVER:
   AMP:
     ENABLED: false
@@ -115,7 +120,7 @@ SOLVER:
   WEIGHT_DECAY: 0.0001
   WEIGHT_DECAY_BIAS: null
   WEIGHT_DECAY_NORM: 0.0
-  CHECKPOINT_PERIOD: 100
+  CHECKPOINT_PERIOD: 200
   CLIP_GRADIENTS:
     CLIP_TYPE: value
     CLIP_VALUE: 1.0
@@ -123,9 +128,9 @@ SOLVER:
     NORM_TYPE: 2.0
   GAMMA: 0.3
   LR_SCHEDULER_NAME: WarmupMultiStepLR
-  MAX_ITER: 20020
+  MAX_ITER: 50020
   REFERENCE_WORLD_SIZE: 0
-  STEPS: [800, 3200, 15000]
+  STEPS: [800, 3200, 40000]
   WARMUP_FACTOR: 0.001 # times base_lr in beginning
   WARMUP_ITERS: 400
   WARMUP_METHOD: linear

@@ -100,6 +100,8 @@ class FCOSOutputs3D(nn.Module):
 
         self.loss_weight_cls = cfg.MODEL.FCOS.LOSS_WEIGHT_CLS
 
+        self.iter = 0
+
     def _transpose(self, training_targets, num_loc_list):
         """
         This function is used to transpose image first training targets to level first ones
@@ -413,6 +415,8 @@ class FCOSOutputs3D(nn.Module):
     def fcos_losses(self, instances):
         losses, extras = {}, {}
 
+        assert instances.reg_pred.shape == instances.reg_targets.shape
+
         # 1. compute the cls loss
         num_classes = instances.logits_pred.size(1)
         assert num_classes == self.num_classes
@@ -452,19 +456,36 @@ class FCOSOutputs3D(nn.Module):
         losses["loss_fcos_cls"] = class_loss * self.loss_weight_cls
 
         # 2. compute the box regression and quality loss
+        # print('total inds: {}'.format(instances.gt_inds.unique()))
         instances = instances[pos_inds]
         instances.pos_inds = pos_inds
+        print('from fcos_output3d, positve logits_pred {}'.format(instances.logits_pred[:10].detach().cpu().numpy()[:, 0]))
+
 
         ious, gious = compute_ious_3d(instances.reg_pred, instances.reg_targets)
+        print('from fcos_output3d, reg_pred is {}'.format(instances.reg_pred[:10].detach().cpu().numpy()))
 
         if self.box_quality == "ctrness":
             ctrness_targets = compute_ctrness_targets_3d(instances.reg_targets)
             instances.gt_ctrs = ctrness_targets
 
+            # filter centerness_targets
+            # ctr_thres = 1 - self.iter/200
+            # ctr_inds = instances.gt_ctrs > ctr_thres
+            # instances = instances[ctr_inds]
+            # ctrness_targets = 
+            print('from fcos_output3d, ctrness_target is {}'.format(ctrness_targets.sort(descending=True)[0].cpu().numpy()))
+            # print('and it contains gt_inds {}'.format(instances.gt_inds))
+
+            # ious, gious = ious[ctrness_targets>0.7], gious[ctrness_targets>0.7]
+            # wctrness = ctrness_targets[ctrness_targets>0.7]
+            # ctrness_targets_sum = wctrness.sum()
             ctrness_targets_sum = ctrness_targets.sum()
             loss_denorm = max(reduce_mean(ctrness_targets_sum).item(), 1e-6)
             extras["loss_denorm"] = loss_denorm
 
+            # print(ious.shape, gious.shape, wctrness.shape)
+            # reg_loss = self.loc_loss_func(ious, gious, wctrness) / loss_denorm
             reg_loss = self.loc_loss_func(ious, gious, ctrness_targets) / loss_denorm
             losses["loss_fcos_loc"] = reg_loss
 
@@ -478,6 +499,8 @@ class FCOSOutputs3D(nn.Module):
         elif self.box_quality == "iou":
             reg_loss = self.loc_loss_func(ious, gious) / num_pos_avg
             losses["loss_fcos_loc"] = reg_loss
+
+            print('from fcos_output3d, iou_target is {}'.format(ious.detach().cpu().numpy()))
 
             quality_loss = (
                 F.binary_cross_entropy_with_logits(

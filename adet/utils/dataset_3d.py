@@ -120,7 +120,8 @@ class Boxes3D(Boxes):
             ],
             dim=-1,
         )
-        print(inter_box.shape)
+        # print('from box3d iou')
+        # print(inter_box.shape)
         i = Boxes3D(inter_box).area()
         u = self[id1].area() + self[id2].area() - i
         return i / u
@@ -163,6 +164,8 @@ def read_header(path):
 
 
 def read_volume(path):
+    '''
+    return 3d numpy array'''
     image = sitk.ReadImage(path)
     data = sitk.GetArrayFromImage(image)
     header = {
@@ -209,8 +212,9 @@ def draw_edge(data, mx, mi):
             data[c] = 2
 
 
-def get_label(data, label_no=1):
+def get_label(data, label_no=1, thres=20):
     """
+    data: S, H, W
     labels: N*6"""
     data = (data == label_no).astype(int)
     ldata, n = label(data, np.ones((3, 3, 3)))
@@ -219,7 +223,7 @@ def get_label(data, label_no=1):
     # filter small segments
     for inst in ls:
         for sl in inst:
-            if sl.stop - sl.start < 20:
+            if sl.stop - sl.start < thres:
                 rmd.append(inst)
                 break
     for r in rmd:

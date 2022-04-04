@@ -204,7 +204,7 @@ def compute_ctrness_targets_3d(reg_targets):
         * (top_bottom.min(dim=-1)[0] / top_bottom.max(dim=-1)[0])
         * (near_far.min(dim=-1)[0] / near_far.max(dim=-1)[0])
     )
-    return torch.sqrt(ctrness)
+    return torch.pow(ctrness, 1/3)
 
 
 @PROPOSAL_GENERATOR_REGISTRY.register()

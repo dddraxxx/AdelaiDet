@@ -201,7 +201,7 @@ def compute_ious_3d(pred, target):
     # printde('pred_area')
     # printde('area_intersect')
 
-    ious = (area_intersect + 1.0) / (area_union + 1.0)
+    ious = (area_intersect + 0.5) / (area_union + 0.5)
     gious = ious - (ac_uion - area_union) / ac_uion
 
     return ious, gious
