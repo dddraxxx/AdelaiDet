@@ -60,6 +60,7 @@ from adet.utils.dataset_3d import Copier, get_dataset, Boxes3D
 from adet.utils.dataset_2d import get_dataset2d
 from adet.utils.nnunet_generator import nnUNet_loader
 from ValidateHook import build_val_hook
+os.environ['CUDA_VISIBLE_DEVICES'] = '7'
 
 class random3D(Dataset):
     def __init__(self, length):
@@ -161,6 +162,7 @@ class Trainer(DefaultTrainer):
                 self.before_step()
                 self.run_step()
                 self.after_step()
+                torch.cuda.empty_cache()
             self.after_train()
 
     def train(self):
@@ -194,8 +196,10 @@ class Trainer(DefaultTrainer):
         if cfg.DATALOADER.TYPE == 'nnunet':
             return nnUNet_loader(cfg)
         if '3d' not in cfg.MODEL.META_ARCHITECTURE.lower() and len(cfg.MODEL.PIXEL_MEAN)==3:
-            return DataLoader(get_dataset2d(total_len), cfg.SOLVER.IMS_PER_BATCH, collate_fn=lambda x: x, shuffle=True, pin_memory=True,   num_workers=cfg.SOLVER.IMS_PER_BATCH+8)
-        return DataLoader(get_dataset(total_len), cfg.SOLVER.IMS_PER_BATCH, collate_fn= trivial_batch_collator, shuffle=True, pin_memory=True,   num_workers=cfg.SOLVER.IMS_PER_BATCH+8)
+            return DataLoader(get_dataset2d(total_len), cfg.SOLVER.IMS_PER_BATCH, collate_fn=lambda x: x, shuffle=True,
+                              pin_memory=True, num_workers=cfg.SOLVER.IMS_PER_BATCH + 8)
+        return DataLoader(get_dataset(total_len), cfg.SOLVER.IMS_PER_BATCH, collate_fn=trivial_batch_collator,
+                              shuffle=True, pin_memory=True, num_workers=cfg.SOLVER.IMS_PER_BATCH + 8)
 
     @classmethod
     def build_evaluator(cls, cfg, dataset_name, output_folder=None):
