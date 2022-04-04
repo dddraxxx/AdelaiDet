@@ -4,6 +4,9 @@ import torch
 from torch.nn import functional as F
 from torch import nn
 
+from adet.utils.gridding import GriddingReverse, remove_zero
+from adet.utils.chamfer_distance import ChamferDistance
+
 from adet.utils.comm import (
     aligned_bilinear3d,
     compute_locations,
@@ -11,6 +14,34 @@ from adet.utils.comm import (
     compute_locations3d,
 )
 
+def sample_gumbel(shape, eps=1e-20):
+    U = torch.rand(shape)
+    U = U.cuda()
+    return -torch.log(-torch.log(U + eps) + eps)
+
+def gumbel_softmax_sample(logits, temperature=1):
+    y = logits + sample_gumbel(logits.size())
+    return F.softmax(y / temperature, dim=-1)
+
+def gumbel_softmax(logits, temperature=1, hard=False):
+    """
+    ST-gumple-softmax
+    input: [*, n_class]
+    return: flatten --> [*, n_class] an one-hot vector
+    """
+    y = gumbel_softmax_sample(logits, temperature)
+
+    if not hard:
+        return y
+
+    shape = y.size()
+    _, ind = y.max(dim=-1)
+    y_hard = torch.zeros_like(y).view(-1, shape[-1])
+    y_hard.scatter_(1, ind.view(-1, 1), 1)
+    y_hard = y_hard.view(*shape)
+    # Set gradients w.r.t. y_hard gradients w.r.t. y
+    y_hard = (y_hard - y).detach() + y
+    return y_hard
 
 def compute_project_term(mask_scores, gt_bitmasks):
     mask_losses_y = dice_coefficient(
@@ -236,6 +267,19 @@ class DynamicMaskHead3D(nn.Module):
         self.area_beta = cfg.MODEL.BOXINST.AREA_LOSS.BETA
         self.down_iter = cfg.MODEL.BOXINST.AREA_LOSS.DOWN_ITER
         self.max_iter = cfg.SOLVER.MAX_ITER
+        
+        self.gumbel_enabled = True
+
+        self.shape_enabled = True
+        self.chamfer_dist = ChamferDistance().cuda()
+        self.grid_rev = GriddingReverse(64)
+        self.label_pc = []
+        template_path = '/home/duhao/workspace/projects/AdelaiDet/adet/utils/gridding/template_pc'
+        with open(template_path, 'r') as f:
+            for line in f:
+                infos = [float(x) for x in line.split(' ')]
+                self.label_pc.append(infos)
+        self.label_pc = torch.tensor(self.label_pc).cuda().unsqueeze(0).contiguous()
 
         weight_nums, bias_nums = [], []
         for l in range(self.num_layers):
@@ -358,6 +402,17 @@ class DynamicMaskHead3D(nn.Module):
                     mask_feats, mask_feat_stride, pred_instances
                 )
                 mask_scores = mask_logits.sigmoid()
+                
+                if self.shape_enabled:
+                    pred = mask_logits.squeeze(1).unsqueeze(-1)
+                    if self.gumbel_enabled:
+                        pred = torch.cat([pred, 1 - pred], dim=-1)
+                        pred = gumbel_softmax(pred, hard=True)
+                    pred_pc = self.grid_rev(pred[:, :, :, :, 0].contiguous())
+                    # loss_pc = sum(self.chamfer_dist(item.unsqueeze(0), self.label_pc) for item in pred_pc)
+                    # print(pred_pc.shape)
+                    loss_pc = self.chamfer_dist(pred_pc, self.label_pc.repeat(pred_pc.shape[0], 1, 1))
+                    print(loss_pc)
 
                 if self.boxinst_enabled:
                     # box-supervised BoxInst losses
@@ -402,6 +457,7 @@ class DynamicMaskHead3D(nn.Module):
                             "loss_prj": loss_prj_term,
                             "loss_pairwise": loss_pairwise,
                             "loss_area": area_loss,
+                            "loss_pc": loss_pc,
                         }
                     )
                 else:
