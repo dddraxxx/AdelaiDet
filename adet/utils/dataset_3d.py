@@ -165,7 +165,8 @@ def read_header(path):
 
 def read_volume(path):
     '''
-    return 3d numpy array'''
+    return 3d numpy array and its header'''
+    path = str(path)
     image = sitk.ReadImage(path)
     data = sitk.GetArrayFromImage(image)
     header = {
@@ -183,6 +184,7 @@ def save_volume(path, data, header):
     :param header:
     :return:
     """
+    path = str(path)
     img_itk = sitk.GetImageFromArray(data)
 
     img_itk.SetSpacing(header["spacing"])

@@ -52,7 +52,7 @@ def draw_seg_on_vol(data, lb, if_norm=True, alpha=0.3):
                             (d * 255).repeat(3, 1, 1).to(torch.uint8),
                             l.bool(),
                             alpha=alpha,
-                            colors=["red", "green", "pink"],
+                            colors=["red", "green", "blue"],
                         ))
     return torch.stack(res)/255
 
@@ -84,7 +84,14 @@ def save_img(path, width=5, inter_dst=10, save_name=None):
     path = pa(path)
     visulize_3d(img, width, inter_dst, save_name or path.with_suffix(".png"))
 
-def norm(data, dim=3):
+def norm(data, dim=3, ct=False):
+    data = tt(data)
+    if ct:
+        data1 = data.flatten(start_dim=-3)
+        l = data1.shape[-1]
+        upper = data.kthvalue(int(0.95*l), dim=-1)
+        lower = data.kthvalue(int(0.05*l), dim=-1)
+        data = data.clip(lower, upper)
     return PyTMinMaxScalerVectorized()(data, dim=3)
 
 class PyTMinMaxScalerVectorized(object):

@@ -19,6 +19,7 @@ from functools import wraps
 import logging
 import os
 from collections import OrderedDict
+from pprint import pprint
 import torch
 from torch.nn.parallel import DistributedDataParallel
 
@@ -58,9 +59,11 @@ import monai.transforms as T
 
 from adet.utils.dataset_3d import Copier, get_dataset, Boxes3D
 from adet.utils.dataset_2d import get_dataset2d
-from adet.utils.nnunet_generator import nnUNet_loader
+from adet.utils.nnunet_generator import get_generator, nnUNet_loader
 from ValidateHook import build_val_hook
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+
+# os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+
 
 class random3D(Dataset):
     def __init__(self, length):
@@ -68,16 +71,17 @@ class random3D(Dataset):
         self.length = length
         self.data = [torch.rand(1, 250, 400, 400) for _ in range(3)]
         self.crop = T.RandSpatialCrop(
-            (64*2, 64*2, 64*2), random_center=False, random_size=False
+            (64 * 2, 64 * 2, 64 * 2), random_center=False, random_size=False
         )
-        self.normalizer = lambda x: (x-x.mean(dim=[1,2,3],keepdim=True))/x.std(dim=[1,2,3],keepdim=True)
-
+        self.normalizer = lambda x: (x - x.mean(dim=[1, 2, 3], keepdim=True)) / x.std(
+            dim=[1, 2, 3], keepdim=True
+        )
 
     def __getitem__(self, index):
         index = index % len(self.data)
         x = self.data[index]
         gt_instance = Instances((0, 0))
-        gt_boxes = Boxes3D(torch.tensor([40,40,40,60,60,60])[None])
+        gt_boxes = Boxes3D(torch.tensor([40, 40, 40, 60, 60, 60])[None])
         gt_instance.gt_boxes = gt_boxes
         gt_instance.gt_classes = torch.tensor([0])
         size = dict(height=128, width=64, depth=256)
@@ -86,6 +90,7 @@ class random3D(Dataset):
 
     def __len__(self):
         return self.length
+
 
 class random2D(Dataset):
     def __init__(self, length):
@@ -97,14 +102,17 @@ class random2D(Dataset):
         index = index % len(self.data)
         x = self.data[index]
         gt_instance = Instances((0, 0))
-        gt_boxes = Boxes(torch.tensor(([40,60,60,80],[10, 10, 40, 50],[70,70,90,85])))
+        gt_boxes = Boxes(
+            torch.tensor(([40, 60, 60, 80], [10, 10, 40, 50], [70, 70, 90, 85]))
+        )
         gt_instance.gt_boxes = gt_boxes
-        gt_instance.gt_classes=torch.tensor([2,1, 2])
+        gt_instance.gt_classes = torch.tensor([2, 1, 2])
         size = dict(height=128, width=128)
         return {"image": x, "instances": gt_instance, **size}
 
     def __len__(self):
         return self.length
+
 
 class Trainer(DefaultTrainer):
     """
@@ -158,11 +166,11 @@ class Trainer(DefaultTrainer):
         with EventStorage(start_iter) as self.storage:
             self.before_train()
             for self.iter in range(start_iter, max_iter):
-                print('iter: {}'.format(self.iter))
+                print("iter: {}".format(self.iter))
                 self.before_step()
                 self.run_step()
                 self.after_step()
-                # torch.cuda.empty_cache()
+                torch.cuda.empty_cache()
             self.after_train()
 
     def train(self):
@@ -192,14 +200,31 @@ class Trainer(DefaultTrainer):
             mapper = DatasetMapperWithBasis(cfg, True)
         # return build_detection_train_loader(cfg, mapper=mapper)
         # return DataLoader(random3D(cfg.SOLVER.MAX_ITER), 1, collate_fn=lambda x: x, shuffle=True)
-        total_len = cfg.SOLVER.MAX_ITER * cfg.SOLVER.IMS_PER_BATCH * comm.get_world_size()
-        if cfg.DATALOADER.TYPE == 'nnunet':
+        total_len = (
+            cfg.SOLVER.MAX_ITER * cfg.SOLVER.IMS_PER_BATCH * comm.get_world_size()
+        )
+        if cfg.DATALOADER.TYPE == "nnunet":
             return nnUNet_loader(cfg)
-        if '3d' not in cfg.MODEL.META_ARCHITECTURE.lower() and len(cfg.MODEL.PIXEL_MEAN)==3:
-            return DataLoader(get_dataset2d(total_len), cfg.SOLVER.IMS_PER_BATCH, collate_fn=lambda x: x, shuffle=True,
-                              pin_memory=True, num_workers=cfg.SOLVER.IMS_PER_BATCH + 8)
-        return DataLoader(get_dataset(total_len), cfg.SOLVER.IMS_PER_BATCH, collate_fn=trivial_batch_collator,
-                              shuffle=True, pin_memory=True, num_workers=cfg.SOLVER.IMS_PER_BATCH + 8)
+        if (
+            "3d" not in cfg.MODEL.META_ARCHITECTURE.lower()
+            and len(cfg.MODEL.PIXEL_MEAN) == 3
+        ):
+            return DataLoader(
+                get_dataset2d(total_len),
+                cfg.SOLVER.IMS_PER_BATCH,
+                collate_fn=lambda x: x,
+                shuffle=True,
+                pin_memory=True,
+                num_workers=cfg.SOLVER.IMS_PER_BATCH + 8,
+            )
+        return DataLoader(
+            get_dataset(total_len),
+            cfg.SOLVER.IMS_PER_BATCH,
+            collate_fn=trivial_batch_collator,
+            shuffle=True,
+            pin_memory=True,
+            num_workers=cfg.SOLVER.IMS_PER_BATCH + 8,
+        )
 
     @classmethod
     def build_evaluator(cls, cfg, dataset_name, output_folder=None):
@@ -303,12 +328,26 @@ def main(args):
         trainer.register_hooks(
             [hooks.EvalHook(0, lambda: trainer.test_with_TTA(cfg, trainer.model))]
         )
-    print(trainer._trainer.model, file=open("3d_network.js", "w"))
+    # check model size
+    # model = get_generator(return_trainer=True)[0].network
     model = trainer._trainer.model
-    total_params = sum(p.nelement()*p.element_size() for p in model.parameters())
-    total_buff = sum(b.nelement()*b.element_size() for b in model.buffers())
-    size_all_mb = (total_params + total_buff)/ 1024**2
-    print('model size: {:.3f}MB'.format(size_all_mb), file=open("3d_network.js", "a"))
+    print(model, file=open("3d_network.js", "w"))
+    total_params = sum(p.nelement() * p.element_size() for p in model.parameters())
+    total_buff = sum(b.nelement() * b.element_size() for b in model.buffers())
+    print(
+        "model buff size: {:.3f}MB, model param size:{:.3f}MB".format(
+            total_buff / 1024 ** 2, total_params / 1024 ** 2
+        ),
+        file=open("3d_network.js", "a"),
+    )
+    def modelsize_dict(model):
+        dct = {}
+        dct.update(size=sum(p.nelement() * p.element_size() for p in model.parameters()))
+        dct.update(dict((n, modelsize_dict(m)) for n, m in model.named_children()))
+        dct = {model._get_name():dct}
+        return dct
+    msize = modelsize_dict(model)
+    pprint(msize, open("3d_network.js", "a"), )
 
     return trainer.train()
 

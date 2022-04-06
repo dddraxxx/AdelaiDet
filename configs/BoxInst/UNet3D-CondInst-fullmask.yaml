@@ -1,9 +1,9 @@
-OUTPUT_DIR: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask2
+OUTPUT_DIR: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst
 CUDNN_BENCHMARK: false
 DATALOADER:
   TYPE: nnunet
 EVAL:
-  SAVE_DIR: ./validation-raw-condinst-fullmask
+  SAVE_DIR: ./validation-raw-condinst-fullmask2
 VAL:
   ENABLED: true
   BATCH_NUM: 50
@@ -19,8 +19,8 @@ MODEL:
   # WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_100_0.96/model_0009999.pth
   # WEIGHTS: training_dir/BoxInst/UNet3D-CondInst/model_0000999.pth
   # WEIGHTS: training_dir/BoxInst/UNet3D-CondInst-nnunet/model_0004999.pth
-  # WEIGHTS: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask/model_0006999.pth
-  # WEIGHTS: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-onlyseg/model_0019999.pth
+  # WEIGHTS: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask/model_0029999.pth
+  # WEIGHTS: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask2/model_0049999.pth
   BACKBONE:
     ANTI_ALIAS: false
     FREEZE_AT: 2
@@ -95,7 +95,7 @@ MODEL:
     PRE_NMS_TOPK_TEST: 20
     PRE_NMS_TOPK_TRAIN: 1000
     PRIOR_PROB: 0.01
-    SIZES_OF_INTEREST: [16, 32, 64, 128] # [8, 16, 32, 64]
+    SIZES_OF_INTEREST: [8, 16, 32, 64]
     THRESH_WITH_CTR: false # ?
     TOP_LEVELS: 2
     USE_DEFORMABLE: false

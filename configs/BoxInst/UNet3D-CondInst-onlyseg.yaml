@@ -3,7 +3,7 @@ CUDNN_BENCHMARK: false
 DATALOADER:
   TYPE: nnunet
 EVAL:
-  SAVE_DIR: ./validation-raw-condinst-fullmask-onlyseg-epo2w5
+  SAVE_DIR: ./validation-raw-condinst-fullmask-onlyseg
 VAL:
   ENABLED: true
   BATCH_NUM: 50

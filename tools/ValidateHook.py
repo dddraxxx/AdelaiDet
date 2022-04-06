@@ -94,4 +94,4 @@ class ValHook(HookBase):
             self._do_eval()
         # func is likely a closure that holds reference to the trainer
         # therefore we clean it to avoid circular reference in the end
-        del self._func
+        del self._loader
