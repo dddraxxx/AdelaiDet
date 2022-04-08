@@ -19,9 +19,30 @@ from nnunet.run.default_configuration import get_default_configuration
 from nnunet.utilities.task_name_id_conversion import convert_id_to_task_name
 from adet.utils.dataset_3d import *
 
-args = argparse.Namespace(continue_training=False, deterministic=False, disable_next_stage_pred=False, disable_postprocessing_on_folds=False, disable_saving=False, find_lr=False, fold='0', fp32=True, network='3d_lowres', network_trainer='nnUNetTrainerV2', npz=False, p='nnUNetPlansv2.1', pretrained_weights=None, task='135', use_compressed_data=False, val_disable_overwrite=True, val_folder='validation_raw', valbest=False, validation_only=False)
+args = argparse.Namespace(
+    continue_training=False,
+    deterministic=False,
+    disable_next_stage_pred=False,
+    disable_postprocessing_on_folds=False,
+    disable_saving=False,
+    find_lr=False,
+    fold="0",
+    fp32=True,
+    network="3d_lowres",
+    network_trainer="nnUNetTrainerV2",
+    npz=False,
+    p="nnUNetPlansv2.1",
+    pretrained_weights=None,
+    task="361",
+    use_compressed_data=False,
+    val_disable_overwrite=True,
+    val_folder="validation_raw",
+    valbest=False,
+    validation_only=False,
+)
 
-def get_generator(cfg=None, mode='train', return_trainer=False):
+
+def get_generator(cfg=None, mode="train", return_trainer=False):
     task = args.task
     fold = args.fold
     network = args.network
@@ -49,7 +70,7 @@ def get_generator(cfg=None, mode='train', return_trainer=False):
         task_id = int(task)
         task = convert_id_to_task_name(task_id)
 
-    if fold == 'all':
+    if fold == "all":
         pass
     else:
         fold = int(fold)
@@ -63,33 +84,54 @@ def get_generator(cfg=None, mode='train', return_trainer=False):
     # else:
     #     raise ValueError("force_separate_z must be None, True or False. Given: %s" % force_separate_z)
 
-    plans_file, output_folder_name, dataset_directory, batch_dice, stage, \
-    trainer_class = get_default_configuration(network, task, network_trainer, plans_identifier)
+    (
+        plans_file,
+        output_folder_name,
+        dataset_directory,
+        batch_dice,
+        stage,
+        trainer_class,
+    ) = get_default_configuration(network, task, network_trainer, plans_identifier)
 
-    trainer = trainer_class(plans_file, fold, output_folder=output_folder_name, dataset_directory=dataset_directory,
-                            batch_dice=batch_dice, stage=stage, unpack_data=decompress_data,
-                            deterministic=deterministic,
-                            fp16=run_mixed_precision)
+    trainer = trainer_class(
+        plans_file,
+        fold,
+        output_folder=output_folder_name,
+        dataset_directory=dataset_directory,
+        batch_dice=batch_dice,
+        stage=stage,
+        unpack_data=decompress_data,
+        deterministic=deterministic,
+        fp16=run_mixed_precision,
+    )
 
     trainer.uinst_dct = {}
     dct = trainer.uinst_dct
     if cfg:
-        trainer.uinst_dct.update({'batch_size': cfg.SOLVER.IMS_PER_BATCH})
+        trainer.uinst_dct.update({"batch_size": cfg.SOLVER.IMS_PER_BATCH})
         trainer.uinst_dct.update(num_classes=cfg.MODEL.FCOS.NUM_CLASSES + 1)
-    trainer.uinst_dct.update({'deep_supervision_scales': None})
-    
+    trainer.uinst_dct.update({"deep_supervision_scales": None})
+
     if args.disable_saving:
-        trainer.save_final_checkpoint = False # whether or not to save the final checkpoint
-        trainer.save_best_checkpoint = False  # whether or not to save the best checkpoint according to
+        trainer.save_final_checkpoint = (
+            False  # whether or not to save the final checkpoint
+        )
+        trainer.save_best_checkpoint = (
+            False  # whether or not to save the best checkpoint according to
+        )
         # self.best_val_eval_criterion_MA
-        trainer.save_intermediate_checkpoints = True  # whether or not to save checkpoint_latest. We need that in case
+        trainer.save_intermediate_checkpoints = (
+            True  # whether or not to save checkpoint_latest. We need that in case
+        )
         # the training chashes
-        trainer.save_latest_only = True  # if false it will not store/overwrite _latest but separate files each
+        trainer.save_latest_only = (
+            True  # if false it will not store/overwrite _latest but separate files each
+        )
 
     trainer.initialize(not validation_only)
 
-    assert mode in ['train', 'val']    
-    if mode=='train':
+    assert mode in ["train", "val"]
+    if mode == "train":
         gen = trainer.tr_gen
     else:
         gen = trainer.val_gen
@@ -106,6 +148,7 @@ def get_generator(cfg=None, mode='train', return_trainer=False):
         return trainer, gen
     return gen
 
+
 def remove_all_but_the_two_largest_conn_comp(img_npy, thres=1e3):
     labelmap, num_labels = label((img_npy > 0).astype(int))
 
@@ -113,41 +156,72 @@ def remove_all_but_the_two_largest_conn_comp(img_npy, thres=1e3):
         label_sizes = []
         for i in range(1, num_labels + 1):
             label_sizes.append(np.sum(labelmap == i))
-        argsrt = np.argsort(label_sizes)[::-1] # two largest are now argsrt[0] and argsrt[1]
+        argsrt = np.argsort(label_sizes)[
+            ::-1
+        ]  # two largest are now argsrt[0] and argsrt[1]
 
-        keep_mask=[]
+        keep_mask = []
         for idx in argsrt[:2]:
-            print('this kidney has size {}'.format(label_sizes[idx]))
-            if label_sizes[idx]>thres:
-                keep_mask.append(labelmap == idx+1)
-        
-        img_npy = np.stack(keep_mask).astype(int) if len(keep_mask) else np.zeros_like(img_npy[None])
+            print("this kidney has size {}".format(label_sizes[idx]))
+            if label_sizes[idx] > thres:
+                keep_mask.append(labelmap == idx + 1)
+
+        img_npy = (
+            np.stack(keep_mask).astype(int)
+            if len(keep_mask)
+            else np.zeros_like(img_npy[None])
+        )
     else:
         img_npy = img_npy[None]
     return img_npy
-        
-        
+
 
 class nnUNet_loader:
     def __init__(self, cfg):
         self.gen = get_generator(cfg)
         self.seg = cfg.MODEL.CONDINST.ONLY_SEG
-        _  = self.gen.next()
-    
+        _ = self.gen.next()
+
     @staticmethod
-    def create_instance_by(data, seg, seg_or_inst):
-        '''data: 1, 128, 128, 128
-        seg: 1, 128, 128, 128'''
-        seg = (seg==1).numpy()
+    def create_instance_by(data, seg: torch.Tensor, seg_or_inst):
+        """data: 1, 128, 128, 128
+        seg: 1, 128, 128, 128
+        return 4D data"""
+        if args.task == "151":
+            seg = (seg == 1).numpy()
         if not seg_or_inst:
-            filtered_seg = remove_all_but_the_two_largest_conn_comp(seg[0], thres=5e2)
-        else: filtered_seg = seg
-        filtered_seg = torch.from_numpy(filtered_seg).float()
+            if args.task == "361":
+                seg = seg.int()
+                if (seg <= 0).all():
+                    print("no kidney for this instance")
+                    filtered_seg = torch.zeros(0, *seg.shape[-3:])
+                else:
+                    uni = seg.unique()
+                    filtered_seg = torch.cat([seg == i for i in uni if i > 0])
+            elif args.task == "151":
+                filtered_seg = remove_all_but_the_two_largest_conn_comp(
+                    seg[0], thres=5e2
+                )
+            else:
+                raise Exception()
+        else:
+            filtered_seg = seg
+        filtered_seg = torch.as_tensor(filtered_seg).float()
         # print(filtered_seg.shape)
-        labels = T.BoundingRect()(filtered_seg)[:, [0, 2, 4, 1, 3, 5]]
+        labels = (
+            T.BoundingRect()(filtered_seg)[:, [0, 2, 4, 1, 3, 5]]
+            if len(filtered_seg)
+            else torch.zeros(0, 6)
+        )
         # print(labels.shape)
-        print('total {} kidneys for this instance'.format(len(labels)))
-        print('max edge for label: {}'.format((labels[:, 3:]-labels[:, :3]).max()/2))
+        print("total {} kidneys for this instance".format(len(labels)))
+        if len(labels):
+            print(
+                "max edge for label: {}".format(
+                    (labels[:, 3:] - labels[:, :3]).max() / 2
+                )
+            )
+            print("labels: {}".format(labels))
 
         gt_instance = Instances((0, 0))
         gt_boxes = Boxes3D(labels)
@@ -163,10 +237,14 @@ class nnUNet_loader:
     def __iter__(self):
         while True:
             dct = self.gen.next()
-            data = dct['data']
-            seg = dct['target']
-            instances = [[dct[i][j] for i in ['data', 'target']] for j in range(len(dct['data']))]
-            instances = [self.create_instance_by(*i, seg_or_inst=self.seg) for i in instances]
+            data = dct["data"]
+            seg = dct["target"]
+            instances = [
+                [dct[i][j] for i in ["data", "target"]] for j in range(len(dct["data"]))
+            ]
+            instances = [
+                self.create_instance_by(*i, seg_or_inst=self.seg) for i in instances
+            ]
             yield instances
 
 

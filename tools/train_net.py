@@ -170,7 +170,7 @@ class Trainer(DefaultTrainer):
                 self.before_step()
                 self.run_step()
                 self.after_step()
-                torch.cuda.empty_cache()
+                # torch.cuda.empty_cache()
             self.after_train()
 
     def train(self):

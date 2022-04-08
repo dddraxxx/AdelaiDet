@@ -70,7 +70,8 @@ class ValHook(HookBase):
                 model.eval()
                 res = model_pred(img, model)
                 res = res[:, 1:] # 0 is for bkgrd
-                gt = (gt==1)
+                # gt = (gt==1)
+                gt = gt>0
                 dce = dc(res, gt.cuda())
                 # print(dce.shape)
                 val_dc.append(dce)

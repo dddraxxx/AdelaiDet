@@ -249,6 +249,7 @@ class FCOSOutputs3D(nn.Module):
 
             # no gt
             if bboxes.numel() == 0:
+                print('no instance for this image')
                 labels.append(
                     labels_per_im.new_zeros(locations.size(0)) + self.num_classes
                 )
