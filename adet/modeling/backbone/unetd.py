@@ -1,5 +1,5 @@
 import math
-from torch import nn
+from torch import batch_norm, nn
 import torch.nn.functional as F
 import fvcore.nn.weight_init as weight_init
 
@@ -79,7 +79,7 @@ class UNETD(Backbone):
         ]
         self.per_strides = [1] + [2] * (stage_num - 1)
         prod = lambda x: reduce(operator.mul, x, 1)
-        self.strides = [prod(self.per_strides[:i+1]) for i in range(stage_num)]
+        self.strides = [prod(self.per_strides[: i + 1]) for i in range(stage_num)]
 
         self.all_features_names = [f"res{i}" for i in range(stage_num)]
         self._out_feature_channels = dict(
@@ -113,7 +113,7 @@ class UNETD(Backbone):
             skips.append(x)
 
         out = dict(zip(self.all_features_names, skips))
-        return {i:out[i] for i in self._out_features}
+        return {i: out[i] for i in self._out_features}
 
 
 class LastLevelP6P7(nn.Module):
@@ -171,6 +171,7 @@ class FPN3D(Backbone):
         norm="",
         top_block=None,
         fuse_type="sum",
+        lateral_layers=1,
     ):
         """
         Args:
@@ -209,9 +210,18 @@ class FPN3D(Backbone):
 
         use_bias = norm == ""
         for idx, in_channels in enumerate(in_channels_per_feature):
-            lateral_conv = nn.Conv3d(
-                in_channels, out_channels, kernel_size=1, bias=use_bias
-            )
+            if lateral_layers == 1:
+                lateral_conv = nn.Conv3d(
+                    in_channels, out_channels, kernel_size=1, bias=use_bias
+                )
+            else:
+                # To expand size as nnunet
+                lateral_conv = nn.Sequential(
+                    nn.Conv3d(in_channels, in_channels, kernel_size=3, stride=1, padding=1, bias=use_bias),
+                    nn.BatchNorm3d(in_channels),
+                    nn.ReLU(inplace=True),
+                    nn.Conv3d(in_channels, out_channels, kernel_size=1, bias=use_bias),
+                )
             output_conv = nn.Conv3d(
                 out_channels,
                 out_channels,
@@ -220,7 +230,10 @@ class FPN3D(Backbone):
                 padding=1,
                 bias=use_bias,
             )
-            weight_init.c2_xavier_fill(lateral_conv)
+            for m in lateral_conv.modules():
+                if 'Conv' in m.__class__.__name__:
+                    weight_init.c2_xavier_fill(m)
+
             weight_init.c2_xavier_fill(output_conv)
             stage = int(math.log2(strides[idx]))
             self.add_module("fpn_lateral{}".format(stage), lateral_conv)
@@ -328,5 +341,6 @@ def build_fcos_unet_fpn_backbone(cfg, input_shape: ShapeSpec):
         norm=cfg.MODEL.FPN.NORM,
         top_block=top_block,
         fuse_type=cfg.MODEL.FPN.FUSE_TYPE,
+        lateral_layers=cfg.MODEL.FPN.LATERAL_LAYERS,
     )
     return backbone

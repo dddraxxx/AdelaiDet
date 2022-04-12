@@ -111,6 +111,9 @@ def get_generator(cfg=None, mode="train", return_trainer=False):
         trainer.uinst_dct.update({"batch_size": cfg.SOLVER.IMS_PER_BATCH})
         trainer.uinst_dct.update(num_classes=cfg.MODEL.FCOS.NUM_CLASSES + 1)
     trainer.uinst_dct.update({"deep_supervision_scales": None})
+    # Replace val generator gt since it has only one class when do task 361
+    if args.task == '361':
+        trainer.val_gt_folder = '/mnt/sdb/nnUNet/nnUNet_raw_data/Task361_KiDsOnly/labelsTr_seg'
 
     if args.disable_saving:
         trainer.save_final_checkpoint = (

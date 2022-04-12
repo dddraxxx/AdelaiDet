@@ -1,9 +1,9 @@
-OUTPUT_DIR: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst2
+OUTPUT_DIR: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst_L
 CUDNN_BENCHMARK: false
 DATALOADER:
   TYPE: nnunet
 EVAL:
-  SAVE_DIR: ./validation-raw-condinst-fullmask-inst2
+  SAVE_DIR: ./validation-raw-condinst-fullmask-inst_L
 VAL:
   ENABLED: true
   BATCH_NUM: 50
@@ -21,7 +21,7 @@ MODEL:
   # WEIGHTS: training_dir/BoxInst/UNet3D-CondInst-nnunet/model_0004999.pth
   # WEIGHTS: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask/model_0029999.pth
   # WEIGHTS: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask2/model_0049999.pth
-  WEIGHTS: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst2/model_0054999.pth
+  # WEIGHTS: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst2/model_0049999.pth
   BACKBONE:
     ANTI_ALIAS: false
     FREEZE_AT: 2
@@ -38,7 +38,7 @@ MODEL:
     IN_FEATURES:  [res0, res1, res2, res3, res4]
     NORM: ""
     OUT_CHANNELS: 128
-    LATERAL_LAYERS: 1
+    LATERAL_LAYERS: 2
   BOXINST:
     BOTTOM_PIXELS_REMOVED: 0
     ENABLED: false
@@ -59,7 +59,7 @@ MODEL:
       CHANNELS: 32 # 128
       IN_FEATURES: [p0, p1, p2, p3, p4]
       NORM: BN
-      NUM_CONVS: 1
+      NUM_CONVS: 0 # 1
       UP_CONVS: 0
       OUT_CHANNELS: 8 # 16
       SEMANTIC_LOSS_ON: false
@@ -71,7 +71,7 @@ MODEL:
       USE_FP16: false
     MASK_OUT_STRIDE: 1
     MAX_PROPOSALS: -1
-    TOPK_PROPOSALS_PER_IM: 9
+    TOPK_PROPOSALS_PER_IM: 6
   FCOS:
     # seems like an important change
     BOX_QUALITY: iou
@@ -86,12 +86,12 @@ MODEL:
     LOSS_GAMMA: 4.0 # Modified to make cls and loc loss decrease simultaneously
     LOSS_NORMALIZER_CLS: fg
     LOSS_WEIGHT_CLS: 1.0
-    NMS_TH: 0.5 # 0.6 the best
+    NMS_TH: 0.5
     NORM: GN
     NUM_CLASSES: 1
     NUM_CLS_CONVS: 4
     NUM_SHARE_CONVS: 0
-    POST_NMS_TOPK_TEST: 5 # 6 the best
+    POST_NMS_TOPK_TEST: 6 # ?
     POST_NMS_TOPK_TRAIN: 100
     POS_RADIUS: 1.5
     PRE_NMS_TOPK_TEST: 16
@@ -132,7 +132,7 @@ SOLVER:
   LR_SCHEDULER_NAME: WarmupMultiStepLR
   MAX_ITER: 125000
   REFERENCE_WORLD_SIZE: 0
-  STEPS: [2000, 12000, 32000, 62000, 102000]
+  STEPS: [2000, 12000, 32000, 62000]
   WARMUP_FACTOR: 0.001 # times base_lr in beginning
   WARMUP_ITERS: 400
   WARMUP_METHOD: linear

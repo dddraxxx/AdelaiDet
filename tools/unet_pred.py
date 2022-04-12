@@ -28,10 +28,6 @@ from adet.utils.visualize_niigz import (
     draw_3d_box_on_vol,
 )
 
-# constants
-WINDOW_NAME = "COCO detections"
-
-
 def setup_cfg_3d(args):
     cfg = CfgNode()
     cfg.merge_from_file(args.config_file)
