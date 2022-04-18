@@ -154,6 +154,7 @@ if __name__ == "__main__":
         trainer.network.inference_apply_nonlin = lambda x:x
         model.do_ds = False
         trainer.validate(save_softmax=False, do_mirroring=False, debug=False, validation_folder_name=cfg.EVAL.SAVE_DIR,
-                            run_postprocessing_on_folds=False,
-                         overwrite=True)
+                            run_postprocessing_on_folds=False, 
+                         overwrite=True,
+                         step_size=0.25)
     print('finished')

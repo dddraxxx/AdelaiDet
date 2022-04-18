@@ -112,8 +112,10 @@ def get_generator(cfg=None, mode="train", return_trainer=False):
         trainer.uinst_dct.update(num_classes=cfg.MODEL.FCOS.NUM_CLASSES + 1)
     trainer.uinst_dct.update({"deep_supervision_scales": None})
     # Replace val generator gt since it has only one class when do task 361
-    if args.task == '361':
-        trainer.val_gt_folder = '/mnt/sdb/nnUNet/nnUNet_raw_data/Task361_KiDsOnly/labelsTr_seg'
+    if args.task == "361":
+        trainer.val_gt_folder = (
+            "/mnt/sdb/nnUNet/nnUNet_raw_data/Task361_KiDsOnly/labelsTr_seg"
+        )
 
     if args.disable_saving:
         trainer.save_final_checkpoint = (
@@ -252,4 +254,31 @@ class nnUNet_loader:
 
 
 if __name__ == "__main__":
-    get_generator()
+    gen = get_generator()
+    # gen.transform.transforms[1].patch_size=None
+
+    # gen.generator.final_patch_size = gen.generator.patch_size
+
+    # gen.generator.patch_size = gen.generator.final_patch_size
+    # gen.generator.need_to_pad = np.zeros(3).astype(int)
+    gg= gen.generator
+    # gg.data_shape = (gg.batch_size, 1, *gg.patch_size)
+    # gg.seg_shape = (gg.batch_size, 1, *gg.patch_size)
+    # gen.transform.transforms.remove(gen.transform.transforms[1])
+
+    gg.oversample_foreground_percent = 0.8
+
+    # check how many complete samples in training
+    cboxes = []
+    for i in range(150):
+        a = gen.next()["target"][:, 0]
+        a = torch.cat([a == i for i in [1, 2]])
+        box = T.BoundingRect()(a)[:, [0, 2, 4, 1, 3, 5]]
+        box = box[(box != 0).any(axis=1)]
+
+        complete_boxes = np.logical_and(box < a.shape[-1], box > 0).all(axis=1)
+        print(box)
+        print(complete_boxes)
+        cboxes.append(complete_boxes)
+    cboxes = np.concatenate(cboxes)
+    print(cboxes.sum(), (~cboxes).sum())
