@@ -75,6 +75,8 @@ class FCOSOutputs3D(nn.Module):
         self.num_classes = cfg.MODEL.FCOS.NUM_CLASSES
         self.strides = cfg.MODEL.FCOS.FPN_STRIDES
 
+        self.cpl_loss = cfg.MODEL.COMPLETE_INST
+
         # generate sizes of interest
         soi = []
         prev_size = -1
@@ -325,6 +327,7 @@ class FCOSOutputs3D(nn.Module):
         logits_pred,
         reg_pred,
         ctrness_pred,
+        cplness_pred,
         locations,
         gt_instances,
         top_feats=None,
@@ -400,6 +403,19 @@ class FCOSOutputs3D(nn.Module):
             ],
             dim=0,
         )
+        instances.cplness_pred = cat(
+            [
+                # Reshape: (N, 1, Si, Hi, Wi) -> (N*Si*Hi*Wi,)
+                x.permute(0, 2, 3, 4, 1).reshape(-1)
+                for x in cplness_pred
+            ],
+            dim=0,
+        )
+
+        cpl_inds = []
+        for i in gt_instances:
+            cpl_inds.extend(i.complete)
+        instances.complete = cplness_pred[0].new_tensor(cpl_inds)[instances.gt_inds]
 
         if len(top_feats) > 0:
             instances.top_feats = cat(
@@ -512,6 +528,20 @@ class FCOSOutputs3D(nn.Module):
             losses["loss_fcos_iou"] = quality_loss
         else:
             raise NotImplementedError
+        
+        if self.cpl_loss:
+            cplness_targets = instances.complete
+            quality_loss = (
+                F.binary_cross_entropy_with_logits(
+                    instances.cplness_pred, cplness_targets, reduction="sum"
+                )
+                / num_pos_avg
+            )
+            losses["loss_fcos_cpl"] = quality_loss
+            pos_inds = (cplness_targets>0).nonzero().squeeze(1)
+            instances = instances[pos_inds]
+            instances.pos_inds = pos_inds
+            print('after cpl, it contains gt_inds {}'.format(instances.gt_inds))
 
         extras["instances"] = instances
 

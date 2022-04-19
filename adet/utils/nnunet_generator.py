@@ -134,6 +134,10 @@ def get_generator(cfg=None, mode="train", return_trainer=False):
         )
 
     trainer.initialize(not validation_only)
+    if cfg:
+        # Increase samples containing full instance to about 60% (hopefully)
+        if cfg.MODEL.COMPLETE_INST:
+            trainer.tr_gen.generator.oversample_foreground_percent = cfg.DATALOADER.OVER_SAMPLE
 
     assert mode in ["train", "val"]
     if mode == "train":
@@ -216,7 +220,7 @@ class nnUNet_loader:
         labels = (
             T.BoundingRect()(filtered_seg)[:, [0, 2, 4, 1, 3, 5]]
             if len(filtered_seg)
-            else torch.zeros(0, 6)
+            else np.zeros((0, 6))
         )
         # print(labels.shape)
         print("total {} kidneys for this instance".format(len(labels)))
@@ -227,8 +231,11 @@ class nnUNet_loader:
                 )
             )
             print("labels: {}".format(labels))
-
+        
         gt_instance = Instances((0, 0))
+        complete = np.logical_and(labels[:, -3:] < data.shape[-3:], labels[:, :3] > 0).all(axis=1)
+        print('complete instance {} for the kidney'.format(complete))
+        gt_instance.complete = complete
         gt_boxes = Boxes3D(labels)
         gt_instance.gt_boxes = gt_boxes
         gt_instance.gt_classes = torch.zeros(len(labels)).long()
@@ -236,7 +243,7 @@ class nnUNet_loader:
         return {
             "image": data,
             "instances": gt_instance,
-            "height": 128,
+            "height": 0,
         }
 
     def __iter__(self):
@@ -264,9 +271,11 @@ if __name__ == "__main__":
     gg= gen.generator
     # gg.data_shape = (gg.batch_size, 1, *gg.patch_size)
     # gg.seg_shape = (gg.batch_size, 1, *gg.patch_size)
+    # print(gen.transform.transforms[1])
+    # gen.transform.transforms[1].scale=(0.9, 1.5)
     # gen.transform.transforms.remove(gen.transform.transforms[1])
 
-    gg.oversample_foreground_percent = 0.8
+    gg.oversample_foreground_percent = 0.9
 
     # check how many complete samples in training
     cboxes = []

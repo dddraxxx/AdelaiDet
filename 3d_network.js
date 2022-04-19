@@ -123,6 +123,7 @@ UInst3D(
       (cls_logits): Conv3d(128, 1, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
       (bbox_pred): Conv3d(128, 6, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
       (ctrness): Conv3d(128, 1, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+      (cplness): Conv3d(128, 1, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
       (scales): ModuleList(
         (0): Scale()
         (1): Scale()
@@ -177,7 +178,7 @@ UInst3D(
   )
   (controller): Conv3d(128, 177, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
 )
-model buff size: 0.014MB, model param size:62.778MB
+model buff size: 0.014MB, model param size:62.791MB
 {'UInst3D': {'backbone': {'FPN3D': {'bottom_up': {'UNETD': {'conv_blocks_context': {'ModuleList': {'0': {'StackedConvLayers': {'blocks': {'Sequential': {'0': {'ConvDropoutNormNonlin': {'conv': {'Conv3d': {'size': 3584}},
                                                                                                                                                                                          'instnorm': {'BatchNorm3d': {'size': 256}},
                                                                                                                                                                                          'lrelu': {'LeakyReLU': {'size': 0}},
@@ -303,6 +304,7 @@ model buff size: 0.014MB, model param size:62.778MB
                                                                                                        '8': {'ReLU': {'size': 0}},
                                                                                                        '9': {'Conv3d': {'size': 1769984}},
                                                                                                        'size': 7084032}},
+                                                                          'cplness': {'Conv3d': {'size': 13828}},
                                                                           'ctrness': {'Conv3d': {'size': 13828}},
                                                                           'scales': {'ModuleList': {'0': {'Scale': {'size': 4}},
                                                                                                     '1': {'Scale': {'size': 4}},
@@ -311,8 +313,8 @@ model buff size: 0.014MB, model param size:62.778MB
                                                                                                     '4': {'Scale': {'size': 4}},
                                                                                                     'size': 20}},
                                                                           'share_tower': {'Sequential': {'size': 0}},
-                                                                          'size': 14278708}},
+                                                                          'size': 14292536}},
                                                'fcos_outputs': {'FCOSOutputs3D': {'loc_loss_func': {'IOULoss': {'size': 0}},
                                                                                   'size': 0}},
-                                               'size': 14278708}},
-             'size': 65827736}}
+                                               'size': 14292536}},
+             'size': 65841564}}
