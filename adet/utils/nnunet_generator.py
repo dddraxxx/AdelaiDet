@@ -136,7 +136,7 @@ def get_generator(cfg=None, mode="train", return_trainer=False):
     trainer.initialize(not validation_only)
     if cfg:
         # Increase samples containing full instance to about 60% (hopefully)
-        if cfg.MODEL.COMPLETE_INST:
+        if cfg.MODEL.FCOS.COMPLETE_INST:
             trainer.tr_gen.generator.oversample_foreground_percent = cfg.DATALOADER.OVER_SAMPLE
 
     assert mode in ["train", "val"]

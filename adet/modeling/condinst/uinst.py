@@ -289,7 +289,6 @@ class UInst3D(nn.Module):
         proposals, proposal_losses = self.proposal_generator(
             images_norm, features, gt_instances, self.controller
         )
-        # torch.cuda.empty_cache()
 
         if self.training:
             mask_losses = self._forward_mask_heads_train(

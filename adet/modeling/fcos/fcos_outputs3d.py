@@ -13,6 +13,7 @@ from adet.utils.comm import compute_ious_3d, reduce_sum, reduce_mean, compute_io
 from adet.layers import ml_nms3d, IOULoss
 from adet.utils.dataset_3d import Boxes3D
 
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +76,8 @@ class FCOSOutputs3D(nn.Module):
         self.num_classes = cfg.MODEL.FCOS.NUM_CLASSES
         self.strides = cfg.MODEL.FCOS.FPN_STRIDES
 
-        self.cpl_loss = cfg.MODEL.COMPLETE_INST
+        self.cpl_loss = cfg.MODEL.FCOS.COMPLETE_INST
+        self.cplness_thres = cfg.MODEL.FCOS.CPLNESS_THRES
 
         # generate sizes of interest
         soi = []
@@ -165,10 +167,18 @@ class FCOSOutputs3D(nn.Module):
         return training_targets
 
     def get_sample_region(
-        self, boxes, strides, num_loc_list, loc_xs, loc_ys, loc_zs, bitmasks=None, radius=1
+        self,
+        boxes,
+        strides,
+        num_loc_list,
+        loc_xs,
+        loc_ys,
+        loc_zs,
+        bitmasks=None,
+        radius=1,
     ):
-        '''
-        Here, (x,y,z) corresponds to (s,h,w)'''
+        """
+        Here, (x,y,z) corresponds to (s,h,w)"""
         if bitmasks is not None:
             _, s, h, w = bitmasks.size()
 
@@ -176,10 +186,10 @@ class FCOSOutputs3D(nn.Module):
             ys = torch.arange(0, h, dtype=torch.float32, device=bitmasks.device)
             xs = torch.arange(0, w, dtype=torch.float32, device=bitmasks.device)
 
-            m00 = bitmasks.sum(dim=(-1,-2,-3)).clamp(min=1e-6)
-            m10 = (bitmasks * xs).sum(dim=(-1,-2,-3))
-            m01 = (bitmasks * ys[:, None]).sum(dim=(-1,-2,-3))
-            m11 = (bitmasks*zs[:,None,None]).sum(dim=(-1,-2,-3))
+            m00 = bitmasks.sum(dim=(-1, -2, -3)).clamp(min=1e-6)
+            m10 = (bitmasks * xs).sum(dim=(-1, -2, -3))
+            m01 = (bitmasks * ys[:, None]).sum(dim=(-1, -2, -3))
+            m11 = (bitmasks * zs[:, None, None]).sum(dim=(-1, -2, -3))
             center_z = m10 / m00
             center_y = m01 / m00
             center_x = m11 / m00
@@ -193,7 +203,7 @@ class FCOSOutputs3D(nn.Module):
         boxes = boxes[None].expand(K, num_gts, -1)
         center_x = center_x[None].expand(K, num_gts)
         center_y = center_y[None].expand(K, num_gts)
-        center_z = center_z[None].expand(K,num_gts)
+        center_z = center_z[None].expand(K, num_gts)
         center_gt = boxes.new_zeros(boxes.shape)
         # no gt
         if center_x.numel() == 0 or center_x[..., 0].sum() == 0:
@@ -215,22 +225,22 @@ class FCOSOutputs3D(nn.Module):
             center_gt[beg:end, :, 1] = torch.where(
                 ymin > boxes[beg:end, :, 1], ymin, boxes[beg:end, :, 1]
             )
-            center_gt[beg:end,:,2] = torch.max(boxes[beg:end,:,2], zmin)
+            center_gt[beg:end, :, 2] = torch.max(boxes[beg:end, :, 2], zmin)
             center_gt[beg:end, :, 3] = torch.where(
                 xmax > boxes[beg:end, :, 3], boxes[beg:end, :, 3], xmax
             )
             center_gt[beg:end, :, 4] = torch.where(
                 ymax > boxes[beg:end, :, 4], boxes[beg:end, :, 4], ymax
             )
-            center_gt[beg:end,:,5] = torch.min(boxes[beg:end,:,5], zmax)
+            center_gt[beg:end, :, 5] = torch.min(boxes[beg:end, :, 5], zmax)
 
             beg = end
         left = loc_xs[:, None] - center_gt[..., 0]
         right = center_gt[..., 3] - loc_xs[:, None]
         top = loc_ys[:, None] - center_gt[..., 1]
         bottom = center_gt[..., 4] - loc_ys[:, None]
-        near = loc_zs[:, None] - center_gt[...,2]
-        far  = center_gt[...,5]  - loc_zs[:,None]
+        near = loc_zs[:, None] - center_gt[..., 2]
+        far = center_gt[..., 5] - loc_zs[:, None]
         center_bbox = torch.stack((left, top, near, right, bottom, far), -1)
         inside_gt_bbox_mask = center_bbox.min(-1)[0] > 0
         return inside_gt_bbox_mask
@@ -251,7 +261,7 @@ class FCOSOutputs3D(nn.Module):
 
             # no gt
             if bboxes.numel() == 0:
-                print('no instance for this image')
+                print("no instance for this image")
                 labels.append(
                     labels_per_im.new_zeros(locations.size(0)) + self.num_classes
                 )
@@ -415,7 +425,8 @@ class FCOSOutputs3D(nn.Module):
         cpl_inds = []
         for i in gt_instances:
             cpl_inds.extend(i.complete)
-        instances.complete = cplness_pred[0].new_tensor(cpl_inds)[instances.gt_inds]
+        c = instances.cplness_pred.new_tensor(cpl_inds)
+        instances.complete = c[instances.gt_inds] if len(gt_instances) else c
 
         if len(top_feats) > 0:
             instances.top_feats = cat(
@@ -473,15 +484,25 @@ class FCOSOutputs3D(nn.Module):
         losses["loss_fcos_cls"] = class_loss * self.loss_weight_cls
 
         # 2. compute the box regression and quality loss
-        print('total inds: {}'.format(instances.gt_inds.unique()))
+        print("total inds: {}".format(instances.gt_inds.unique()))
+        print(f'positive inst num {len(pos_inds)}, negative num {len(instances)-len(pos_inds)}')
+        print(
+            "from fcos_output3d, positve logits_pred {}, negative logits_pred {}".format(
+                np.percentile(instances.logits_pred[pos_inds].detach().sigmoid().cpu().squeeze().numpy(), range(20,71,5))[::-1] if len(pos_inds) else -1,
+                np.percentile(instances.logits_pred[labels == num_classes].detach().sigmoid().cpu().squeeze().numpy(), np.linspace(95, 100, 10))[::-1]
+            )
+        )
         instances = instances[pos_inds]
         instances.pos_inds = pos_inds
-        print('it contains gt_inds {}'.format(instances.gt_inds))
-        print('from fcos_output3d, positve logits_pred {}'.format(instances.logits_pred[:10].detach().cpu().numpy()[:, 0]))
-
+        print("it contains pos gt_inds {}".format(instances.gt_inds.unique()))
 
         ious, gious = compute_ious_3d(instances.reg_pred, instances.reg_targets)
-        print('from fcos_output3d, reg_pred is {}'.format(instances.reg_pred[:10].detach().cpu().numpy()))
+        # print(
+        #     "from fcos_output3d, reg_range is {}, reg_pred is {}".format(
+        #         instances.reg_targets.detach().cpu().unique()[[0,-1]].numpy(),
+        #         instances.reg_pred[:10].detach().cpu().numpy()
+        #     )
+        # )
 
         if self.box_quality == "ctrness":
             ctrness_targets = compute_ctrness_targets_3d(instances.reg_targets)
@@ -491,8 +512,12 @@ class FCOSOutputs3D(nn.Module):
             # ctr_thres = 1 - self.iter/200
             # ctr_inds = instances.gt_ctrs > ctr_thres
             # instances = instances[ctr_inds]
-            # ctrness_targets = 
-            print('from fcos_output3d, ctrness_target is {}'.format(ctrness_targets.sort(descending=True)[0].cpu().numpy()))
+            # ctrness_targets =
+            print(
+                "from fcos_output3d, ctrness_target is {}".format(
+                    ctrness_targets.sort(descending=True)[0].cpu().numpy()
+                )
+            )
 
             # ious, gious = ious[ctrness_targets>0.7], gious[ctrness_targets>0.7]
             # wctrness = ctrness_targets[ctrness_targets>0.7]
@@ -517,7 +542,12 @@ class FCOSOutputs3D(nn.Module):
             reg_loss = self.loc_loss_func(ious, gious) / num_pos_avg
             losses["loss_fcos_loc"] = reg_loss
 
-            print('from fcos_output3d, iou_target is {}'.format(ious.detach().cpu().numpy()))
+            print(
+                "from fcos_output3d, iou_target is {}, iou_pred is {}".format(
+                    ious.detach().cpu()[::4].numpy(),
+                    instances.ctrness_pred.sigmoid().detach().cpu()[::4].numpy()
+                )
+            )
 
             quality_loss = (
                 F.binary_cross_entropy_with_logits(
@@ -528,7 +558,7 @@ class FCOSOutputs3D(nn.Module):
             losses["loss_fcos_iou"] = quality_loss
         else:
             raise NotImplementedError
-        
+
         if self.cpl_loss:
             cplness_targets = instances.complete
             quality_loss = (
@@ -538,10 +568,17 @@ class FCOSOutputs3D(nn.Module):
                 / num_pos_avg
             )
             losses["loss_fcos_cpl"] = quality_loss
-            pos_inds = (cplness_targets>0).nonzero().squeeze(1)
+            pos_inds = (cplness_targets > 0).nonzero().squeeze(1)
+            print('{} insts still, and cpl ration {}'.format(len(instances), len(pos_inds)/(len(instances)+1e-7)))
+            print(
+                "after cpl, positve cpl_pred {}, negative cpl_pred {}".format(
+                    instances.cplness_pred[pos_inds].detach().cpu().sort()[0].sigmoid()[:10].numpy(),
+                    instances.cplness_pred[cplness_targets == 0].detach().cpu().sort(descending=True)[0].sigmoid()[:10].numpy()
+                )
+            )
             instances = instances[pos_inds]
             instances.pos_inds = pos_inds
-            print('after cpl, it contains gt_inds {}'.format(instances.gt_inds))
+            # print("after cpl, it contains gt_inds {}".format(instances.gt_inds))
 
         extras["instances"] = instances
 
@@ -552,6 +589,7 @@ class FCOSOutputs3D(nn.Module):
         logits_pred,
         reg_pred,
         ctrness_pred,
+        cplness_pred,
         locations,
         image_sizes,
         top_feats=None,
@@ -572,6 +610,7 @@ class FCOSOutputs3D(nn.Module):
             "o": logits_pred,
             "r": reg_pred,
             "c": ctrness_pred,
+            "p": cplness_pred,
             "s": self.strides,
         }
 
@@ -587,10 +626,11 @@ class FCOSOutputs3D(nn.Module):
             o = per_bundle["o"]
             r = per_bundle["r"] * per_bundle["s"]
             c = per_bundle["c"]
+            p = per_bundle["p"]
             t = per_bundle["t"] if "t" in bundle else None
 
             sampled_boxes.append(
-                self.forward_for_single_feature_map(l, o, r, c, image_sizes, t)
+                self.forward_for_single_feature_map(l, o, r, c, p, image_sizes, t)
             )
 
             for per_im_sampled_boxes in sampled_boxes[-1]:
@@ -605,7 +645,14 @@ class FCOSOutputs3D(nn.Module):
         return boxlists
 
     def forward_for_single_feature_map(
-        self, locations, logits_pred, reg_pred, ctrness_pred, image_sizes, top_feat=None
+        self,
+        locations,
+        logits_pred,
+        reg_pred,
+        ctrness_pred,
+        cplness_pred,
+        image_sizes,
+        top_feat=None,
     ):
         N, C, S, H, W = logits_pred.shape
 
@@ -616,6 +663,8 @@ class FCOSOutputs3D(nn.Module):
         box_regression = box_regression.reshape(N, -1, 6)
         ctrness_pred = ctrness_pred.view(N, 1, S, H, W).permute(0, 2, 3, 4, 1)
         ctrness_pred = ctrness_pred.reshape(N, -1).sigmoid()
+        cplness_pred = cplness_pred.view(N, 1, S, H, W).permute(0, 2, 3, 4, 1)
+        cplness_pred = cplness_pred.reshape(N, -1).sigmoid()
         if top_feat is not None:
             top_feat = top_feat.view(N, -1, S, H, W).permute(0, 2, 3, 4, 1)
             top_feat = top_feat.reshape(N, S * H * W, -1)
@@ -625,6 +674,12 @@ class FCOSOutputs3D(nn.Module):
         if self.thresh_with_ctr:
             logits_pred = logits_pred * ctrness_pred[:, :, None]
         candidate_inds = logits_pred > self.pre_nms_thresh
+        # print('candidate be4 cpl: {}'.format(candidate_inds.sum()))
+        if self.cpl_loss:
+            candidate_inds = (
+                cplness_pred[:, :, None] > self.cplness_thres
+            ) & candidate_inds
+        # print('candidate after cpl: {}'.format(candidate_inds.sum()))
         pre_nms_top_n = candidate_inds.reshape(N, -1).sum(1)
         pre_nms_top_n = pre_nms_top_n.clamp(max=self.pre_nms_topk)
 

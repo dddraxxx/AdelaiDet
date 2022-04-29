@@ -102,7 +102,7 @@ class FCOS3D(nn.Module):
             return results, losses
         else:
             results = self.fcos_outputs.predict_proposals(
-                logits_pred, reg_pred, ctrness_pred,
+                logits_pred, reg_pred, ctrness_pred, cplness_pred,
                 locations, images.image_sizes, top_feats
             )
             extras = {}
@@ -237,7 +237,8 @@ class FCOSHead(nn.Module):
                 reg = self.scales[l](reg)
             # Note that we use relu, as in the improved FCOS, instead of exp.
             # bbox_reg.append(F.relu(reg))
-            bbox_reg.append(reg.sigmoid()*3-0.75)
+            # bbox_reg.append(reg.sigmoid()*3-0.75)
+            bbox_reg.append(F.relu(reg+2))
             # bbox_reg.append(torch.exp(reg)/2)
             if top_module is not None:
                 top_feats.append(top_module(bbox_tower))

@@ -49,10 +49,10 @@ def draw_seg_on_vol(data, lb, if_norm=True, alpha=0.3):
     res = []
     for d, l in zip(data.transpose(0,1), lb.cpu().transpose(0,1)):
         res.append(draw_segmentation_masks(
-                            (d * 255).repeat(3, 1, 1).to(torch.uint8),
+                            (d).repeat(3, 1, 1),
                             l.bool(),
                             alpha=alpha,
-                            colors=["pink", "green", "red"],
+                            colors=["green", "red", "blue"],
                         ))
     return torch.stack(res)/255
 
