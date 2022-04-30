@@ -2,6 +2,7 @@
 import argparse
 from functools import partial, reduce
 import glob
+from inspect import getframeinfo
 import multiprocessing as mp
 import os
 import time
@@ -28,8 +29,9 @@ from adet.utils.visualize_niigz import (
     draw_3d_box_on_vol,
 )
 
+from gpu_stat import get_free_gpu
 import os
-os.environ['CUDA_VISIBLE_DEVICES']='2'
+os.environ['CUDA_VISIBLE_DEVICES']= str(get_free_gpu())
 
 def setup_cfg_3d(args):
     cfg = CfgNode()
@@ -121,13 +123,14 @@ def extr_result(y, shape, bg_thres=0.5):
     # print(y[0].keys(), y[0]['instances']._fields)
     results = [r["instances"] for r in y]
     res = [(r.pred_masks.sum(dim=0, keepdim=True)>0).int() if hasattr(r, 'pred_masks') else r.top_feat.new_zeros(shape) for r in results]
+    meta = [[r.scores, r.pred_boxes.tensor] if hasattr(r, 'pred_masks') else None for r in results]
     res =  torch.stack(res).float()
     ''' res: B, C, 128, 128, 128'''
 
     thres = bg_thres
     bkgrd = res.new_full(res.shape, thres)
     # print(res.unique(), res.shape)
-    return torch.cat([bkgrd, res], dim=1)
+    return torch.cat([bkgrd, res], dim=1), meta
 
 def model_pred(x, model, bg_thres=0.5):
     '''
@@ -136,7 +139,7 @@ def model_pred(x, model, bg_thres=0.5):
     pred_shape = (1,) + x.shape[-3:]
     x = prep_batch(x)
     y = model(x)
-    res = extr_result(y, pred_shape, bg_thres)
+    res, meta = extr_result(y, pred_shape, bg_thres)
     return res
 
 if __name__ == "__main__":
@@ -158,16 +161,17 @@ if __name__ == "__main__":
         trainer.network.forward = partial(model_pred, model=model, bg_thres = bg_t)
         trainer.network.inference_apply_nonlin = lambda x:x
         trainer.network.cuthalf=True
+        trainer.network.keep_complete = False
         model.do_ds = False
         # test specific case
-        keys = [130, 130] # 273 lower inf_test to 0.65
+        keys = [233, 113] # 273 lower inf_test to 0.65
         keys = ['case_{:05d}'.format(i) for i in keys]
-        trainer.dataset_val = {k: trainer.dataset_val[k] for k in keys}
+        # trainer.dataset_val = {k: trainer.dataset_val[k] for k in keys}
         st = time.time()
         ret = trainer.validate(save_softmax=False, do_mirroring=False, debug=False, validation_folder_name=cfg.EVAL.SAVE_DIR,
                             run_postprocessing_on_folds=False, use_gaussian=use_g, all_in_gpu=True,
                          overwrite=True,
-                         step_size=0.25)
+                         step_size=0.4)
         print(ret['mean']['1']['Dice'])
         print('time spent is {} min'.format((time.time()-st)/60))
     with open('tmp.yaml','w') as fi:

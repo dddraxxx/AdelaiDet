@@ -187,6 +187,7 @@ def remove_all_but_the_two_largest_conn_comp(img_npy, thres=1e3):
 
 class nnUNet_loader:
     def __init__(self, cfg):
+        args.task = cfg.DATALOADER.TASK
         self.gen = get_generator(cfg)
         self.seg = cfg.MODEL.CONDINST.ONLY_SEG
         _ = self.gen.next()
@@ -199,7 +200,7 @@ class nnUNet_loader:
         if args.task == "151":
             seg = (seg == 1).numpy()
         if not seg_or_inst:
-            if args.task == "361":
+            if args.task in ["361"]:
                 seg = seg.int()
                 if (seg <= 0).all():
                     print("no kidney for this instance")
@@ -207,6 +208,13 @@ class nnUNet_loader:
                 else:
                     uni = seg.unique()
                     filtered_seg = torch.cat([seg == i for i in uni if i > 0])
+            elif args.task in ["029"]:
+                seg = seg.int()
+                if (seg <= 0).all():
+                    print("no kidney for this instance")
+                    filtered_seg = torch.zeros(0, *seg.shape[-3:])
+                else:
+                    filtered_seg = seg>0
             elif args.task == "151":
                 filtered_seg = remove_all_but_the_two_largest_conn_comp(
                     seg[0], thres=5e2

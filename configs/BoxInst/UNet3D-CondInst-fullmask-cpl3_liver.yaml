@@ -1,7 +1,8 @@
-OUTPUT_DIR: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl
+OUTPUT_DIR: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl-liver
 CUDNN_BENCHMARK: false
 DATALOADER:
   TYPE: nnunet
+  TASK: 029
   OVER_SAMPLE: 0.9
 EVAL:
   SAVE_DIR: ./validation-raw-condinst-fullmask-inst-cpl
@@ -16,7 +17,7 @@ MODEL:
   # WEIGHTS: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst2/model_0034999.pth
   # WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl/model_0069999.pth
   # WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl2/model_0032599.pth
-  WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl/model_0089999.pth
+  # WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl/model_0089999.pth
   BACKBONE:
     ANTI_ALIAS: false
     FREEZE_AT: 2
