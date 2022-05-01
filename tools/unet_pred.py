@@ -7,6 +7,7 @@ import multiprocessing as mp
 import os
 import time
 import cv2
+import numpy as np
 import torch
 import tqdm
 from torchvision.utils import draw_segmentation_masks
@@ -123,14 +124,14 @@ def extr_result(y, shape, bg_thres=0.5):
     # print(y[0].keys(), y[0]['instances']._fields)
     results = [r["instances"] for r in y]
     res = [(r.pred_masks.sum(dim=0, keepdim=True)>0).int() if hasattr(r, 'pred_masks') else r.top_feat.new_zeros(shape) for r in results]
-    meta = [[r.scores, r.pred_boxes.tensor] if hasattr(r, 'pred_masks') else None for r in results]
+    # meta = [[r.scores, r.pred_boxes.tensor] if hasattr(r, 'pred_masks') else None for r in results]
     res =  torch.stack(res).float()
     ''' res: B, C, 128, 128, 128'''
 
     thres = bg_thres
     bkgrd = res.new_full(res.shape, thres)
     # print(res.unique(), res.shape)
-    return torch.cat([bkgrd, res], dim=1), meta
+    return torch.cat([bkgrd, res], dim=1)
 
 def model_pred(x, model, bg_thres=0.5):
     '''
@@ -139,8 +140,88 @@ def model_pred(x, model, bg_thres=0.5):
     pred_shape = (1,) + x.shape[-3:]
     x = prep_batch(x)
     y = model(x)
-    res, meta = extr_result(y, pred_shape, bg_thres)
+    res = extr_result(y, pred_shape, bg_thres)
     return res
+
+from batchgenerators.augmentations.utils import pad_nd_image
+from detectron2.structures import Instances, Boxes
+def predict_3d(data, model, network, step_size, pad_border_mode='constant',pad_kwargs={'constant_values': 0}, use_gaussian=False, verbose=True, all_in_gpu=True, **kwargs):
+    '''
+    do_mirror unsupported
+    data: 1, H, W, S'''
+    assert use_gaussian==False
+    assert all_in_gpu
+    assert len(data.shape) == 4, "x must be (c, x, y, z)"
+
+    patch_size = (128,128,128)
+    data, slicer = pad_nd_image(data, patch_size, pad_border_mode, pad_kwargs, True, None)
+    data_shape = data.shape  # still c, x, y, z
+    if getattr(network,'cuthalf'):
+        print('step cut half')
+        steps = network._compute_steps_for_sliding_window_cuthalf(patch_size, data.shape[1:], step_size)
+    else:
+        steps = network._compute_steps_for_sliding_window(patch_size, data.shape[1:], step_size)
+    num_tiles = len(steps[0]) * len(steps[1]) * len(steps[2])
+    if verbose:
+            print("data shape:", data_shape)
+            print("patch size:", patch_size)
+            print("steps (x, y, and z):", steps)
+            print("number of tiles:", num_tiles)
+    data = torch.from_numpy(data).cuda(network.get_device(), non_blocking=True)
+        
+
+    st = time.time()
+    patches = []
+    for x in steps[0]:
+            lb_x = x
+            ub_x = x + patch_size[0]
+            for y in steps[1]:
+                lb_y = y
+                ub_y = y + patch_size[1]
+                for z in steps[2]:
+                    lb_z = z
+                    ub_z = z + patch_size[2]
+                    this_patch = prep_batch(data[None, :, lb_x:ub_x, lb_y:ub_y, lb_z:ub_z])
+                    pred = model(this_patch)[0]['instances']
+                    if len(pred):
+                        new_pred = Instances((0,0))
+                        keep_fields = ['pred_boxes', 'scores', 'pred_masks', 'pred_classes', 'pred_global_masks']
+                        for k in keep_fields:
+                            new_pred.set(k, pred.get(k))
+                        pred = new_pred
+                        pred_pos = data.new_tensor([lb_x, lb_y, lb_z, ub_x, ub_y, ub_z])
+                        pred.pred_boxes.tensor = pred.pred_boxes.tensor + pred_pos[:3].repeat(2)
+                        pred.pred_pos = pred_pos.repeat(len(pred),1)
+                        patches.append(pred)
+    print('avg time spent on patch {}'.format((time.time()-st)/num_tiles))
+
+    # do nms  ~~voting~~
+    print('before nms {} inst'.format(len(patches)))
+    boxlists = Instances.cat(patches)
+    boxlists = model.proposal_generator.fcos_outputs.select_over_all_levels([boxlists], post_nms_topk=None)[0]
+    # groups = []
+    # boxlists.group = groups
+    print('after nms {} inst'.format(len(boxlists)))
+
+    if verbose: print("initializing result array (on GPU)")
+    aggregated_results = torch.zeros([network.num_classes] + list(data.shape[1:]), dtype=torch.half,
+                                             device=data.device)
+    aggregated_results[0] = network.ffbg_thres    
+    for i in range(len(boxlists)):
+        box = boxlists[i]
+        pp = box.pred_pos[0].int()
+        sli = np.s_[pp[0]:pp[3], pp[1]:pp[4], pp[2]:pp[5]]
+        aggregated_results[1][sli] = aggregated_results[1][sli] + box.pred_global_masks[0]
+    # aggregated_results = (aggregated_results>0).float()
+
+    # reverse padding
+    slicer = tuple(
+        [slice(0, aggregated_results.shape[i]) for i in
+        range(len(aggregated_results.shape) - (len(slicer) - 1))] + slicer[1:])
+    aggregated_results = aggregated_results[slicer]
+    
+    if verbose: print("prediction done")
+    return None, aggregated_results.detach().cpu().numpy()
 
 if __name__ == "__main__":
     mp.set_start_method("spawn", force=True)
@@ -155,14 +236,20 @@ if __name__ == "__main__":
     model.eval()
 
     with torch.no_grad():
-        trainer, gen = get_generator(cfg, return_trainer=True)
-        bg_t = cfg.EVAL.BG_THRES if (cfg.EVAL.get('BG_THRES') is not None) else 0.5
-        use_g = cfg.EVAL.USE_GAUSSIAN if cfg.EVAL.get('USE_GAUSSIAN') is not None else False
-        trainer.network.forward = partial(model_pred, model=model, bg_thres = bg_t)
-        trainer.network.inference_apply_nonlin = lambda x:x
-        trainer.network.cuthalf=True
-        trainer.network.keep_complete = False
         model.do_ds = False
+
+        trainer, gen = get_generator(cfg, return_trainer=True)
+        use_g = cfg.EVAL.USE_GAUSSIAN or False
+        bg_t = cfg.EVAL.BG_THRES or 0.5
+        trainer.network.ffbg_thres = bg_t
+        trainer.network.cuthalf=True
+        if cfg.EVAL.PATCH_NMS:
+            ppdrss = partial(predict_3d, model = model, network = trainer.network)
+            trainer.predict_preprocessed_data_return_seg_and_softmax = ppdrss
+        else:
+            trainer.network.forward = partial(model_pred, model=model, bg_thres = bg_t)
+            trainer.network.inference_apply_nonlin = lambda x:x
+
         # test specific case
         keys = [233, 113] # 273 lower inf_test to 0.65
         keys = ['case_{:05d}'.format(i) for i in keys]
@@ -171,7 +258,7 @@ if __name__ == "__main__":
         ret = trainer.validate(save_softmax=False, do_mirroring=False, debug=False, validation_folder_name=cfg.EVAL.SAVE_DIR,
                             run_postprocessing_on_folds=False, use_gaussian=use_g, all_in_gpu=True,
                          overwrite=True,
-                         step_size=0.4)
+                         step_size=cfg.EVAL.STEP_SIZE or 0.4)
         print(ret['mean']['1']['Dice'])
         print('time spent is {} min'.format((time.time()-st)/60))
     with open('tmp.yaml','w') as fi:

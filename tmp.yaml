@@ -15,8 +15,10 @@ DATASETS:
   TEST: []
   TRAIN: []
 EVAL:
-  BG_THRES: 0.1
-  SAVE_DIR: ./validation-raw-condinst-fullmask-inst-cpl2
+  BG_THRES: 0.5
+  PATCH_NMS: true
+  SAVE_DIR: ./validation-raw-condinst-fullmask-inst-cpl
+  STEP_SIZE: 0.25
   USE_GAUSSIAN: false
 GLOBAL:
   HACK: 1.0
@@ -175,7 +177,7 @@ MODEL:
     - 16
     - 32
     - 64
-    INFERENCE_TH_TEST: 0.67
+    INFERENCE_TH_TEST: 0.65
     INFERENCE_TH_TRAIN: 0.05
     IN_FEATURES:
     - p2
@@ -184,8 +186,8 @@ MODEL:
     - p5
     - p6
     LOC_LOSS_TYPE: giou
-    LOSS_ALPHA: 0.75
-    LOSS_GAMMA: 4.0
+    LOSS_ALPHA: 0.5
+    LOSS_GAMMA: 3.0
     LOSS_NORMALIZER_CLS: fg
     LOSS_WEIGHT_CLS: 1.0
     NMS_TH: 0.1
@@ -587,8 +589,8 @@ MODEL:
     - stage3
     - stage4
     - stage5
-  WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl2/model_0099999.pth
-OUTPUT_DIR: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl2
+  WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl/model_0099999.pth
+OUTPUT_DIR: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl
 SEED: -1
 SOLVER:
   AMP:

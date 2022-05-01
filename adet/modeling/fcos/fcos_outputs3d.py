@@ -738,7 +738,7 @@ class FCOSOutputs3D(nn.Module):
 
         return results
 
-    def select_over_all_levels(self, boxlists):
+    def select_over_all_levels(self, boxlists, post_nms_topk=None):
         num_images = len(boxlists)
         results = []
         for i in range(num_images):
@@ -748,7 +748,7 @@ class FCOSOutputs3D(nn.Module):
             number_of_detections = len(result)
 
             # Limit to max_per_image detections **over all classes**
-            if number_of_detections > self.post_nms_topk > 0:
+            if number_of_detections > (post_nms_topk or self.post_nms_topk) > 0:
                 cls_scores = result.scores
                 image_thresh, _ = torch.kthvalue(
                     cls_scores.cpu(), number_of_detections - self.post_nms_topk + 1

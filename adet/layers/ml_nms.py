@@ -30,6 +30,20 @@ def ml_nms(
     boxlist = boxlist[keep]
     return boxlist
 
+# not done
+def nms3d_index(boxlist, nms_thresh, max_proposals=-1):
+    if nms_thresh <= 0:
+        return boxlist
+    boxes = boxlist.pred_boxes.tensor
+    scores = boxlist.scores
+    labels = boxlist.pred_classes
+    keep = monai_nms(boxes, scores, labels, nms_thresh)
+    if max_proposals > 0:
+        keep = keep[:max_proposals]
+    # print(keep)
+    boxlist = boxlist[keep]
+    # print(boxlist)
+    return boxlist
 
 def ml_nms3d(
     boxlist, nms_thresh, max_proposals=-1, score_field="scores", label_field="labels"
@@ -47,6 +61,7 @@ def ml_nms3d(
     """
     if nms_thresh <= 0:
         return boxlist
+    boxlist = boxlist[boxlist.scores.argsort(descending=True)]
     boxes = boxlist.pred_boxes.tensor
     scores = boxlist.scores
     labels = boxlist.pred_classes
@@ -54,12 +69,13 @@ def ml_nms3d(
     if max_proposals > 0:
         keep = keep[:max_proposals]
     # print(keep)
-    # boxlist = boxlist[keep]
+    boxlist = boxlist[keep]
     # print(boxlist)
     return boxlist
 
 
 def monai_nms(boxes, scores, idxs, nms_thresh):
+    '''keep it sorted'''
     assert boxes.shape[-1] == 6
     result_mask = scores.new_zeros(scores.size(), dtype=torch.bool)
     for id in torch.jit.annotate(List[int], torch.unique(idxs).cpu().tolist()):
@@ -72,6 +88,7 @@ def monai_nms(boxes, scores, idxs, nms_thresh):
 
 
 def nms3d(boxes, scores, thresh):
+    '''keep it sorted'''
     assert len(boxes) == len(scores)
     bx = Boxes3D(boxes)
     l = torch.arange(len(boxes))

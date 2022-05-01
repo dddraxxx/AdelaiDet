@@ -5,7 +5,9 @@ DATALOADER:
   OVER_SAMPLE: 0.9
 EVAL:
   SAVE_DIR: ./validation-raw-condinst-fullmask-inst-cpl2
-  BG_THRES: 0.1
+  PATCH_NMS: true
+  BG_THRES: 0.6 # when applied to patch_nms: compared with sigmoid, when not: compared with avg masks
+  STEP_SIZE: 0.25 # need to keep whole instance in a patch
   USE_GAUSSIAN: false
 VAL:
   ENABLED: true
@@ -82,12 +84,12 @@ MODEL:
     LOSS_GAMMA: 4.0 # Modified to make cls and loc loss decrease simultaneously
     LOSS_NORMALIZER_CLS: fg
     LOSS_WEIGHT_CLS: 1.0
-    NMS_TH: 0.1 # 0.6 the best
+    NMS_TH: 0.5 # 0.6 the best
     NORM: GN
     NUM_CLASSES: 1
     NUM_CLS_CONVS: 4
     NUM_SHARE_CONVS: 0
-    POST_NMS_TOPK_TEST: 4 # 6 the best
+    POST_NMS_TOPK_TEST: 4 # used for single patch and whole image # 6 the best
     POST_NMS_TOPK_TRAIN: 100
     POS_RADIUS: 1.5
     PRE_NMS_TOPK_TEST: 24
