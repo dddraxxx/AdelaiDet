@@ -197,7 +197,7 @@ def predict_3d(data, model, network, step_size, pad_border_mode='constant',pad_k
 
     # do nms  ~~voting~~
     print('before nms {} inst'.format(len(patches)))
-    boxlists = Instances.cat(patches)
+    boxlists = Instances.cat(patches) if len(patches) else pred
     boxlists = model.proposal_generator.fcos_outputs.select_over_all_levels([boxlists], post_nms_topk=None)[0]
     # groups = []
     # boxlists.group = groups
@@ -220,6 +220,9 @@ def predict_3d(data, model, network, step_size, pad_border_mode='constant',pad_k
         range(len(aggregated_results.shape) - (len(slicer) - 1))] + slicer[1:])
     aggregated_results = aggregated_results[slicer]
     
+    if verbose:
+        predicted_segmentation = (aggregated_results.argmax(dim=0)).detach().cpu().numpy()
+        print('from neural_network, cls:', np.unique(predicted_segmentation, return_counts=True))
     if verbose: print("prediction done")
     return None, aggregated_results.detach().cpu().numpy()
 
@@ -242,7 +245,7 @@ if __name__ == "__main__":
         use_g = cfg.EVAL.USE_GAUSSIAN or False
         bg_t = cfg.EVAL.BG_THRES or 0.5
         trainer.network.ffbg_thres = bg_t
-        trainer.network.cuthalf=True
+        trainer.network.cuthalf= cfg.EVAL.get('CUTHALF') or False
         if cfg.EVAL.PATCH_NMS:
             ppdrss = partial(predict_3d, model = model, network = trainer.network)
             trainer.predict_preprocessed_data_return_seg_and_softmax = ppdrss
@@ -251,8 +254,9 @@ if __name__ == "__main__":
             trainer.network.inference_apply_nonlin = lambda x:x
 
         # test specific case
-        keys = [233, 113] # 273 lower inf_test to 0.65
-        keys = ['case_{:05d}'.format(i) for i in keys]
+        keys = [12] 
+        # keys = ['case_{:05d}'.format(i) for i in keys] # for task kidney
+        keys = ['train_{:02d}'.format(i) for i in keys] # for task liver
         # trainer.dataset_val = {k: trainer.dataset_val[k] for k in keys}
         st = time.time()
         ret = trainer.validate(save_softmax=False, do_mirroring=False, debug=False, validation_folder_name=cfg.EVAL.SAVE_DIR,

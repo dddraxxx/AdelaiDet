@@ -4,9 +4,13 @@ DATALOADER:
   TYPE: nnunet
   TASK: 029
   OVER_SAMPLE: 0.9
+  PLANS: 
+  CUTHALF: true
 EVAL:
-  SAVE_DIR: ./validation-raw-condinst-fullmask-inst-cpl
-  BG_THRES: 0.1
+  SAVE_DIR: ./validation-raw-condinst-fullmask-inst-cpl-liver
+  PATCH_NMS: true
+  BG_THRES: 0.1 # when applied to patch_nms: compared with sigmoid, when not: compared with avg masks
+  STEP_SIZE: 0.2 # need to keep whole instance in a patch
   USE_GAUSSIAN: false
 VAL:
   ENABLED: true
@@ -17,7 +21,7 @@ MODEL:
   # WEIGHTS: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst2/model_0034999.pth
   # WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl/model_0069999.pth
   # WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl2/model_0032599.pth
-  # WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl/model_0089999.pth
+  WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl-liver/model_0093399.pth
   BACKBONE:
     ANTI_ALIAS: false
     FREEZE_AT: 2
@@ -132,7 +136,7 @@ SOLVER:
   REFERENCE_WORLD_SIZE: 0
   STEPS: [2000, 12000, 32000, 62000, 102000]
   WARMUP_FACTOR: 0.001 # times base_lr in beginning
-  WARMUP_ITERS: 400
+  WARMUP_ITERS: 800
   WARMUP_METHOD: linear
 VERSION: 2
 VIS_PERIOD: 0

@@ -43,6 +43,10 @@ args = argparse.Namespace(
 
 
 def get_generator(cfg=None, mode="train", return_trainer=False):
+    if cfg:
+        args.p = cfg.DATALOADER.get('PLANS') or args.p
+        args.task = cfg.DATALOADER.TASK
+    
     task = args.task
     fold = args.fold
     network = args.network
@@ -137,7 +141,9 @@ def get_generator(cfg=None, mode="train", return_trainer=False):
     if cfg:
         # Increase samples containing full instance to about 60% (hopefully)
         if cfg.MODEL.FCOS.COMPLETE_INST:
-            trainer.tr_gen.generator.oversample_foreground_percent = cfg.DATALOADER.OVER_SAMPLE
+            trainer.tr_gen.generator.oversample_foreground_percent = (
+                cfg.DATALOADER.OVER_SAMPLE
+            )
 
     assert mode in ["train", "val"]
     if mode == "train":
@@ -187,7 +193,6 @@ def remove_all_but_the_two_largest_conn_comp(img_npy, thres=1e3):
 
 class nnUNet_loader:
     def __init__(self, cfg):
-        args.task = cfg.DATALOADER.TASK
         self.gen = get_generator(cfg)
         self.seg = cfg.MODEL.CONDINST.ONLY_SEG
         _ = self.gen.next()
@@ -214,7 +219,7 @@ class nnUNet_loader:
                     print("no kidney for this instance")
                     filtered_seg = torch.zeros(0, *seg.shape[-3:])
                 else:
-                    filtered_seg = seg>0
+                    filtered_seg = seg > 0
             elif args.task == "151":
                 filtered_seg = remove_all_but_the_two_largest_conn_comp(
                     seg[0], thres=5e2
@@ -239,10 +244,12 @@ class nnUNet_loader:
                 )
             )
             print("labels: {}".format(labels))
-        
+
         gt_instance = Instances((0, 0))
-        complete = np.logical_and(labels[:, -3:] < data.shape[-3:], labels[:, :3] > 0).all(axis=1)
-        print('complete instance {} for the kidney'.format(complete))
+        complete = np.logical_and(
+            labels[:, -3:] < data.shape[-3:], labels[:, :3] > 0
+        ).all(axis=1)
+        print("complete instance {} for the kidney".format(complete))
         gt_instance.complete = complete
         gt_boxes = Boxes3D(labels)
         gt_instance.gt_boxes = gt_boxes
@@ -276,7 +283,7 @@ if __name__ == "__main__":
 
     # gen.generator.patch_size = gen.generator.final_patch_size
     # gen.generator.need_to_pad = np.zeros(3).astype(int)
-    gg= gen.generator
+    gg = gen.generator
     # gg.data_shape = (gg.batch_size, 1, *gg.patch_size)
     # gg.seg_shape = (gg.batch_size, 1, *gg.patch_size)
     # print(gen.transform.transforms[1])

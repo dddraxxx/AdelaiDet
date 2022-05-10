@@ -52,7 +52,7 @@ def draw_seg_on_vol(data, lb, if_norm=True, alpha=0.3):
                             (d).repeat(3, 1, 1),
                             l.bool(),
                             alpha=alpha,
-                            colors=["green", "red", "blue"],
+                            colors=["green", "red", "blue"] if len(l)<4 else None,
                         ))
     return torch.stack(res)/255
 

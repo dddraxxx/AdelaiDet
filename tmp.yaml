@@ -1,11 +1,14 @@
 CUDNN_BENCHMARK: false
 DATALOADER:
   ASPECT_RATIO_GROUPING: true
+  CUTHALF: false
   FILTER_EMPTY_ANNOTATIONS: true
   NUM_WORKERS: 4
-  OVER_SAMPLE: 0.9
+  OVER_SAMPLE: 0.5
+  PLANS: uinst
   REPEAT_THRESHOLD: 0.0
   SAMPLER_TRAIN: TrainingSampler
+  TASK: 029
   TYPE: nnunet
 DATASETS:
   PRECOMPUTED_PROPOSAL_TOPK_TEST: 1000
@@ -17,7 +20,7 @@ DATASETS:
 EVAL:
   BG_THRES: 0.5
   PATCH_NMS: true
-  SAVE_DIR: ./validation-raw-condinst-fullmask-inst-cpl
+  SAVE_DIR: ./validation-raw-condinst-fullmask-inst-cpl-liver-dwsp
   STEP_SIZE: 0.25
   USE_GAUSSIAN: false
 GLOBAL:
@@ -170,14 +173,14 @@ MODEL:
     BOX_QUALITY: iou
     CENTER_SAMPLE: true
     COMPLETE_INST: true
-    CPLNESS_THRES: 0.7
+    CPLNESS_THRES: 0.05
     FPN_STRIDES:
     - 4
     - 8
     - 16
     - 32
     - 64
-    INFERENCE_TH_TEST: 0.65
+    INFERENCE_TH_TEST: 0.6
     INFERENCE_TH_TRAIN: 0.05
     IN_FEATURES:
     - p2
@@ -589,8 +592,8 @@ MODEL:
     - stage3
     - stage4
     - stage5
-  WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl/model_0099999.pth
-OUTPUT_DIR: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl
+  WEIGHTS: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl-liver-dwsp/model_0124999.pth
+OUTPUT_DIR: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl-liver-dwsp
 SEED: -1
 SOLVER:
   AMP:
@@ -617,7 +620,7 @@ SOLVER:
   - 62000
   - 102000
   WARMUP_FACTOR: 0.001
-  WARMUP_ITERS: 400
+  WARMUP_ITERS: 800
   WARMUP_METHOD: linear
   WEIGHT_DECAY: 0.0001
   WEIGHT_DECAY_BIAS: null
