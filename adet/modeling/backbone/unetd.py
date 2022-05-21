@@ -612,7 +612,7 @@ def build_fcos_unet_fpn_backbone(cfg, input_shape: ShapeSpec):
         norm=cfg.MODEL.FPN.NORM,
         top_block=top_block,
         fuse_type=cfg.MODEL.FPN.FUSE_TYPE,
-        lateral_layers=cfg.MODEL.FPN.LATERAL_LAYERS,
+        lateral_layers=cfg.MODEL.FPN.get('LATERAL_LAYERS',1),
     )
     return backbone
 

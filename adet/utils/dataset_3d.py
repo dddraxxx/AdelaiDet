@@ -261,7 +261,7 @@ class Copier(object):
 
 
 class Volumes(Dataset):
-    def __init__(self, length):
+    def __init__(self, length, datapath=None):
         super().__init__()
         self.length = length
         # 10 samples total
@@ -285,7 +285,8 @@ class Volumes(Dataset):
         }
         self.ppr_datapath = "/mnt/sdc/kits21/data_3d_ppr/{:05d}.pt"
         self.orig_datapath = "/mnt/sdc/kits21/data_3d/{:05d}.pt"
-        self.datapath = self.ppr_datapath
+        self.datapath = datapath or self.ppr_datapath
+        # self.datapath = self.orig_datapath
 
     def _prepare_data(self, save_path="/mnt/sdc/kits21/data_3d_ppr"):
         """
@@ -467,17 +468,25 @@ class Volumes(Dataset):
 
         return data.float(), labels.float()
 
-    def get_data(self, index, read_gt=False):
+    def get_data(self, index, read_gt=False, pt=True):
         """
         data: 1, S, H, W
         gt: 1, S, H, W
         label: 1, 6"""
-        dct = torch.load(self.datapath.format(index))
-        x, labels = dct["data"], dct["label"]
-        if not read_gt:
-            return x.float(), torch.as_tensor(labels)[None].float()
+        if pt:
+            dct = torch.load(self.datapath.format(index))
+            x, labels = dct["data"], dct["label"]
+            if not read_gt:
+                return x.float(), torch.as_tensor(labels)[None].float()
+            else:
+                return x.float(), torch.as_tensor(labels)[None].float(), dct["gt"]
         else:
-            return x.float(), torch.as_tensor(labels)[None].float(), dct["gt"]
+            dct = np.load(self.datapath.format(index))
+            x, labels = dct
+            if not read_gt:
+                return x
+            else:
+                return torch.as_tensor(x)[None].float(), torch.as_tensor(labels)[None].float()
 
     def __getitem__(self, index):
         """

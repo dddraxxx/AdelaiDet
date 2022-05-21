@@ -141,7 +141,7 @@ def get_generator(cfg=None, mode="train", return_trainer=False):
     trainer.initialize(not validation_only)
     if cfg:
         # Increase samples containing full instance to about 60% (hopefully)
-        if cfg.MODEL.FCOS.COMPLETE_INST:
+        if cfg.MODEL.FCOS.get('COMPLETE_INST', False):
             trainer.tr_gen.generator.oversample_foreground_percent = (
                 cfg.DATALOADER.OVER_SAMPLE
             )
@@ -195,7 +195,7 @@ def remove_all_but_the_two_largest_conn_comp(img_npy, thres=1e3):
 class nnUNet_loader:
     def __init__(self, cfg):
         self.gen = get_generator(cfg)
-        self.seg = cfg.MODEL.CONDINST.ONLY_SEG
+        self.seg = cfg.MODEL.CONDINST.get('ONLY_SEG', False)
         _ = self.gen.next()
 
     @staticmethod

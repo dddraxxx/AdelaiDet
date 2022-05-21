@@ -60,3 +60,7 @@ script
 
 # tmp files
 tmp*
+
+# ply
+*.ply
+template_pc

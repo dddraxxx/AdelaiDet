@@ -234,7 +234,7 @@ class UInst3D(nn.Module):
                     pixels_removed = int(
                         self.bottom_pixels_removed
                         * float(original_images[i].size(1))
-                        / float(im_h)
+                        / (float(im_h) or 1)
                     )
                     if pixels_removed > 0:
                         original_image_masks[i][-pixels_removed:, :] = 0
@@ -460,6 +460,8 @@ class UInst3D(nn.Module):
             )
 
             per_im_boxes = per_im_gt_inst.gt_boxes.tensor
+            if len(per_im_boxes)==0:
+                continue
             per_im_bitmasks = []
             per_im_bitmasks_full = []
             for per_box in per_im_boxes:
