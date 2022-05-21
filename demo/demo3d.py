@@ -26,6 +26,9 @@ from adet.utils.visualize_niigz import (
     visulize_3d,
     draw_3d_box_on_vol,
 )
+import subprocess
+GPU_ID = subprocess.getoutput('nvidia-smi --query-gpu=memory.free --format=csv,nounits,noheader | nl -v 0 | sort -nrk 2 | cut -f 1| head -n 1 | xargs')
+os.environ['CUDA_VISIBLE_DEVICES'] = GPU_ID
 
 # constants
 WINDOW_NAME = "COCO detections"
@@ -160,7 +163,7 @@ if __name__ == "__main__":
                 dim=[1, 2, 3], keepdim=True
             )
             # ds[path]
-            img, lab, gt = ds.get_data(1, read_gt=True)
+            img, lab, gt = ds.get_data(0, read_gt=True)
             header = ds.header
             # with open('gt_boxes.txt', 'w') as fout:
             #     fout.write(str(lab))
@@ -203,11 +206,12 @@ if __name__ == "__main__":
                 save_name="0inst_data_3d_0.png",
             )
             visulize_3d(
-                draw_3d_box_on_vol(gt[:, low : high + 1 : dst], lab),
+                draw_3d_box_on_vol(gt[:, low : high + 1 : dst].float(), lab),
                 inter_dst=1,
                 save_name="0inst_gt_3d_0.png",
             )
 
+            save_volume('pred1.nii.gz', pred_msks[0], header)
             print(low, high, lab)
             d = img_n[0][low : high + 1 : dst]
             for i, p in enumerate([pred_msks.cpu()[:1]]):

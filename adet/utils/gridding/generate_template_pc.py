@@ -583,7 +583,7 @@ if __name__ == "__main__":
         pc = model(bitmask.unsqueeze(0).cuda().contiguous())
         return pc
 
-    exit(1)
+    # exit(1)
     save_path = './template_pc'
     with open(save_path, 'w') as f:
         for line in pc[0]:

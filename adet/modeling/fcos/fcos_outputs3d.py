@@ -76,8 +76,8 @@ class FCOSOutputs3D(nn.Module):
         self.num_classes = cfg.MODEL.FCOS.NUM_CLASSES
         self.strides = cfg.MODEL.FCOS.FPN_STRIDES
 
-        self.cpl_loss = cfg.MODEL.FCOS.COMPLETE_INST
-        self.cplness_thres = cfg.MODEL.FCOS.CPLNESS_THRES
+        self.cpl_loss = cfg.MODEL.FCOS.get('COMPLETE_INST') or False
+        self.cplness_thres = cfg.MODEL.FCOS.get('CPLNESS_THRES') or False
 
         # generate sizes of interest
         soi = []
@@ -422,11 +422,12 @@ class FCOSOutputs3D(nn.Module):
             dim=0,
         )
 
-        cpl_inds = []
-        for i in gt_instances:
-            cpl_inds.extend(i.complete)
-        c = instances.cplness_pred.new_tensor(cpl_inds)
-        instances.complete = c[instances.gt_inds] if sum(len(i) for i in gt_instances) else c
+        if self.cpl_loss:
+            cpl_inds = []
+            for i in gt_instances:
+                cpl_inds.extend(i.complete)
+            c = instances.cplness_pred.new_tensor(cpl_inds)
+            instances.complete = c[instances.gt_inds] if sum(len(i) for i in gt_instances) else c
 
         if len(top_feats) > 0:
             instances.top_feats = cat(

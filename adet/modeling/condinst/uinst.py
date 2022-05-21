@@ -200,7 +200,7 @@ class UInst3D(nn.Module):
         # )
         self.to(self.device)
 
-        self.only_seg = cfg.MODEL.CONDINST.ONLY_SEG
+        self.only_seg = cfg.MODEL.CONDINST.get('ONLY_SEG', False)
 
     def forward(self, batched_inputs):
         """

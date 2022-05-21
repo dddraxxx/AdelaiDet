@@ -1,4 +1,4 @@
-OUTPUT_DIR: training_dir/BoxInst/UNet3D-BoxInst_240_0.96_area
+OUTPUT_DIR: training_dir/BoxInst/UNet3D-BoxInst_10_0.96 #_area
 CUDNN_BENCHMARK: false
 MODEL:
   # WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-BoxInst_10/model_0000699.pth
@@ -9,8 +9,10 @@ MODEL:
   # WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-BoxInst_5_0.8/model_0009499.pth
   # WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_5_0.96_2dprj/model_0000199.pth
   # WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_100_0.96/model_0000149.pth
-  WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_100_0.96_area/model_0000049.pth
-  WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_240_0.96_area/model_0004999.pth
+  # WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_100_0.96_area/model_0000049.pth
+  # WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_240_0.96_area/model_0004999.pth
+  # WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_10_0.96_area/model_0004999.pth
+
 
   BACKBONE:
     ANTI_ALIAS: false
@@ -25,7 +27,7 @@ MODEL:
       SIZE: 3
       WARMUP_ITERS: 800
     AREA_LOSS:
-      THRESH: 0.4
+      THRESH: 0 #0.4
       WEIGHT: 0.4
       BETA: 6
       DOWN_ITER: 400
@@ -43,7 +45,7 @@ MODEL:
       DISABLE_REL_COORDS: false
       NUM_LAYERS: 3
       USE_FP16: false
-    MASK_OUT_STRIDE: 2
+    MASK_OUT_STRIDE: 4
     MAX_PROPOSALS: -1
     TOPK_PROPOSALS_PER_IM: 32
   FPN:
@@ -51,6 +53,7 @@ MODEL:
     IN_FEATURES: [res2, res3, res4]
     NORM: ""
     OUT_CHANNELS: 64 # 128
+    LATERAL_LAYERS: 1
   FCOS:
     BOX_QUALITY: ctrness
     CENTER_SAMPLE: true
@@ -99,7 +102,7 @@ MODEL:
 SOLVER:
   AMP:
     ENABLED: false
-  BASE_LR: 0.01
+  BASE_LR: 0.001
   IMS_PER_BATCH: 2
   BIAS_LR_FACTOR: 1.0
   MOMENTUM: 0.9
@@ -107,7 +110,7 @@ SOLVER:
   WEIGHT_DECAY: 0.0001
   WEIGHT_DECAY_BIAS: null
   WEIGHT_DECAY_NORM: 0.0
-  CHECKPOINT_PERIOD: 100
+  CHECKPOINT_PERIOD: 1000
   CLIP_GRADIENTS:
     CLIP_TYPE: value
     CLIP_VALUE: 1.0

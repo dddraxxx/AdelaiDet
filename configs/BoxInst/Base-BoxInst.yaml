@@ -10,7 +10,7 @@ MODEL:
   # WEIGHTS: '/home/hynx/AdelaiDet/training_dir/BoxInst/Base-BoxInst_pretrain_10tight/model_0010999.pth'
   # WEIGHTS: '/home/hynx/AdelaiDet/training_dir/BoxInst/Base-BoxInst_pretrain_100tight/model_0013499.pth'
   # WEIGHTS: '/home/hynx/AdelaiDet/training_dir/BoxInst/Base-BoxInst_100tight/model_0010999.pth'
-  WEIGHTS: training_dir/BoxInst/Base-BoxInst_80/model_0009999.pth 
+  # WEIGHTS: training_dir/BoxInst/Base-BoxInst_80/model_0009999.pth 
   META_ARCHITECTURE: "CondInst"
   MASK_ON: True
   BACKBONE:

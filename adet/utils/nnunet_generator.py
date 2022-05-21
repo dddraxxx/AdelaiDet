@@ -45,7 +45,7 @@ args = argparse.Namespace(
 def get_generator(cfg=None, mode="train", return_trainer=False):
     if cfg:
         args.p = cfg.DATALOADER.get('PLANS') or args.p
-        args.task = cfg.DATALOADER.TASK
+        args.task = str(cfg.DATALOADER.get('TASK')) or args.task
     
     task = args.task
     fold = args.fold
@@ -69,10 +69,11 @@ def get_generator(cfg=None, mode="train", return_trainer=False):
     # interp_order = args.interp_order
     # interp_order_z = args.interp_order_z
     # force_separate_z = args.force_separate_z
-
-    if not task.startswith("Task"):
-        task_id = int(task)
-        task = convert_id_to_task_name(task_id)
+    # if task.startswith("Task"):
+    task_id = int(task)
+    task = convert_id_to_task_name(task_id)
+    if task_id == 363:
+        network = '3d_fullres'
 
     if fold == "all":
         pass
@@ -202,10 +203,11 @@ class nnUNet_loader:
         """data: 1, 128, 128, 128
         seg: 1, 128, 128, 128
         return 4D data"""
+        lb = 0
         if args.task == "151":
             seg = (seg == 1).numpy()
         if not seg_or_inst:
-            if args.task in ["361"]:
+            if args.task in ["361", "363"]:
                 seg = seg.int()
                 if (seg <= 0).all():
                     print("no kidney for this instance")
@@ -253,7 +255,7 @@ class nnUNet_loader:
         gt_instance.complete = complete
         gt_boxes = Boxes3D(labels)
         gt_instance.gt_boxes = gt_boxes
-        gt_instance.gt_classes = torch.zeros(len(labels)).long()
+        gt_instance.gt_classes = torch.zeros(len(labels)).long() if lb==0 else torch.tensor(lb).long()
         gt_instance.gt_masks = filtered_seg
         return {
             "image": data,

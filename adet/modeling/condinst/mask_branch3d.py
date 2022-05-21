@@ -81,10 +81,10 @@ class MaskBranch3D(nn.Module):
         num_convs = cfg.MODEL.CONDINST.MASK_BRANCH.NUM_CONVS
         channels = cfg.MODEL.CONDINST.MASK_BRANCH.CHANNELS
         self.input_stride = input_shape[self.in_features[0]].stride
-        self.up_conv_layers = cfg.MODEL.CONDINST.MASK_BRANCH.UP_CONVS
+        self.up_conv_layers = cfg.MODEL.CONDINST.MASK_BRANCH.get('UP_CONVS',0)
         self.out_stride = self.input_stride / 2 ** self.up_conv_layers
 
-        self.only_seg = cfg.MODEL.CONDINST.ONLY_SEG
+        self.only_seg = cfg.MODEL.CONDINST.get('ONLY_SEG',False)
 
         feature_channels = {k: v.channels for k, v in input_shape.items()}
 

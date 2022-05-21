@@ -139,7 +139,7 @@ class Trainer(DefaultTrainer):
                 ret[i] = hooks.PeriodicCheckpointer(
                     self.checkpointer, self.cfg.SOLVER.CHECKPOINT_PERIOD
                 )
-        if self.cfg.VAL.ENABLED:
+        if self.cfg.get('VAL') and self.cfg.VAL.ENABLED:
             self.val_hook = build_val_hook(self.cfg)
             self.register_hooks([self.val_hook])
             self._hooks = self._hooks[:-2] + self._hooks[-2:][::-1]
@@ -203,7 +203,7 @@ class Trainer(DefaultTrainer):
         total_len = (
             cfg.SOLVER.MAX_ITER * cfg.SOLVER.IMS_PER_BATCH * comm.get_world_size()
         )
-        if cfg.DATALOADER.TYPE == "nnunet":
+        if cfg.DATALOADER.get('TYPE') == "nnunet":
             return nnUNet_loader(cfg)
         if (
             "3d" not in cfg.MODEL.META_ARCHITECTURE.lower()

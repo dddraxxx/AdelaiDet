@@ -159,7 +159,9 @@ def parse_dynamic_params(params, channels, weight_nums, bias_nums, last_channel)
             bias_splits[l] = bias_splits[l].reshape(num_insts * channels)
         else:
             # out_channels x in_channels x 1 x 1
-            weight_splits[l] = weight_splits[l].reshape(num_insts * last_channel, -1, 1, 1, 1)
+            weight_splits[l] = weight_splits[l].reshape(
+                num_insts * last_channel, -1, 1, 1, 1
+            )
             bias_splits[l] = bias_splits[l].reshape(num_insts * last_channel)
 
     return weight_splits, bias_splits
@@ -195,7 +197,7 @@ class DynamicMaskHead3D(nn.Module):
         self.num_layers = cfg.MODEL.CONDINST.MASK_HEAD.NUM_LAYERS
         self.channels = cfg.MODEL.CONDINST.MASK_HEAD.CHANNELS
         self.in_channels = cfg.MODEL.CONDINST.MASK_BRANCH.OUT_CHANNELS
-        self.upsample_factor = cfg.MODEL.CONDINST.MASK_HEAD.UPSAMPLE_FACTOR
+        self.upsample_factor = cfg.MODEL.CONDINST.MASK_HEAD.get("UPSAMPLE_FACTOR", 1)
         self.mask_out_stride = cfg.MODEL.CONDINST.MASK_OUT_STRIDE
         self.disable_rel_coords = cfg.MODEL.CONDINST.MASK_HEAD.DISABLE_REL_COORDS
 
@@ -314,7 +316,11 @@ class DynamicMaskHead3D(nn.Module):
         mask_head_inputs = mask_head_inputs.reshape(1, -1, S, H, W)
 
         weights, biases = parse_dynamic_params(
-            mask_head_params, self.channels, self.weight_nums, self.bias_nums, self.upsample_factor
+            mask_head_params,
+            self.channels,
+            self.weight_nums,
+            self.bias_nums,
+            self.upsample_factor,
         )
 
         mask_logits = self.mask_heads_forward(mask_head_inputs, weights, biases, n_inst)
@@ -322,6 +328,7 @@ class DynamicMaskHead3D(nn.Module):
         mask_logits = mask_logits.reshape(-1, self.upsample_factor, S, H, W)
 
         # assert mask_feat_stride >= self.mask_out_stride
+        # print(mask_feat_stride, self.mask_out_stride)
         assert mask_feat_stride == self.mask_out_stride
         # assert mask_feat_stride % self.mask_out_stride == 0
         # mask_logits = aligned_bilinear3d(
@@ -387,21 +394,27 @@ class DynamicMaskHead3D(nn.Module):
                     print(warmup_factor)
                     loss_pairwise = loss_pairwise * warmup_factor
 
-                    area_factor = 1 - (self._iter.item() - self.down_iter) / (
-                        self.max_iter - 2000 - self.down_iter
-                    )
-                    area_factor = max(min(warmup_factor ** 2, area_factor), 0)
-                    print(area_factor)
-                    area_loss = compute_area_constraints(
-                        mask_logits, gt_bitmasks, self.area_beta, self.area_loss_thresh
-                    )
-                    area_loss = area_loss.sum() * self.area_loss_weight * area_factor
+                    if self.area_loss_thresh > 0:
+                        area_factor = 1 - (self._iter.item() - self.down_iter) / (
+                            self.max_iter - 2000 - self.down_iter
+                        )
+                        area_factor = max(min(warmup_factor ** 2, area_factor), 0)
+                        print(area_factor)
+                        area_loss = compute_area_constraints(
+                            mask_logits,
+                            gt_bitmasks,
+                            self.area_beta,
+                            self.area_loss_thresh,
+                        )
+                        area_loss = (
+                            area_loss.sum() * self.area_loss_weight * area_factor
+                        )
+                        losses.update({"loss_area": area_loss})
 
                     losses.update(
                         {
                             "loss_prj": loss_prj_term,
                             "loss_pairwise": loss_pairwise,
-                            "loss_area": area_loss,
                         }
                     )
                 else:

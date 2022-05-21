@@ -265,7 +265,7 @@ class Volumes(Dataset):
         super().__init__()
         self.length = length
         # 10 samples total
-        self.data = list(range(240))  # [0, 1, 2, 3, 4] 5, 6, 7, 8, 9]
+        self.data = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] # list(range(240)) 
         if 236 in self.data:
             self.data.remove(236)
         if 296 in self.data:
