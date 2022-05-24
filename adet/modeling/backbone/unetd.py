@@ -1,4 +1,5 @@
 import math
+from turtle import forward
 from torch import batch_norm, nn
 import torch.nn.functional as F
 import fvcore.nn.weight_init as weight_init
@@ -332,7 +333,7 @@ class Resnet3D(Backbone):
         input_channel = input_shape.channels
         self._out_features = cfg.MODEL.RES3D.OUT_FEATURES
 
-        self.all_features_channels = [# [base_channel] + [
+        self.all_features_channels = [  # [base_channel] + [
             min(base_channel * 2 ** (i), max_channel) for i in range(stage_num)
         ]
         self.per_strides = [1] + [2] * (stage_num - 1)
@@ -408,6 +409,86 @@ class Resnet3D(Backbone):
             for l in module.children():
                 if isinstance(l, (nn.Conv3d, nn.Conv2d)):
                     weight_init.c2_msra_fill(l)
+
+    def forward(self, x):
+        skips = []
+        for d in self.stages:
+            x = d(x)
+            skips.append(x)
+
+        out = dict(zip(self.all_features_names, skips))
+        return {i: out[i] for i in self._out_features}
+
+
+import torchvision.models as models
+
+
+class Stack(nn.Module):
+    def __init__(self, n):
+        super().__init__()
+        self.n = n
+
+    def forward(self, x):
+        return torch.stack([x] * self.n, dim=1)
+class Cat(nn.Module):
+    def __init__(self, n):
+        super().__init__()
+        self.n = n
+
+    def forward(self, x):
+        return torch.cat([x] * self.n, dim=1)
+
+
+class VResNet(Backbone):
+    """Same as r3d-18"""
+
+    def __init__(self, cfg, input_shape, pretrain=False):
+        super().__init__()
+        stage_num = cfg.MODEL.VRES.STAGE_NUM
+        base_channel = cfg.MODEL.VRES.BASE_CHANNELS
+        max_channel = 1e8
+        input_channel = input_shape.channels
+        self._out_features = cfg.MODEL.VRES.OUT_FEATURES
+
+        self.all_features_channels = [3] + [
+            min(base_channel * 2** i, max_channel) for i in range(stage_num - 1)
+        ]
+        self.per_strides = [1] + [2] * (stage_num - 1)
+        prod = lambda x: reduce(operator.mul, x, 1)
+        self.strides = [prod(self.per_strides[: i + 1]) for i in range(stage_num)]
+
+        self.all_features_names = [f"res{i}" for i in range(stage_num)]
+        self._out_feature_channels = dict(
+            zip(self.all_features_names, self.all_features_channels)
+        )
+        self._out_feature_strides = dict(zip(self.all_features_names, self.strides))
+        self._size_divisibility = 2 ** (stage_num - 1)
+
+        r3d_18 = models.video.r3d_18(pretrained=pretrain)
+        r3d_18.stem[0].stride = (2, 2, 2)
+        self.stages = []
+        for i in range(stage_num):
+            oc = self.all_features_channels[i]
+            ic = input_channel
+            if i == 0:
+                m = Cat(3)
+            if i == 1:
+                m = nn.Sequential(r3d_18.stem, r3d_18.layer1)
+            if i == 2:
+                m = nn.Sequential(r3d_18.layer2)
+            if i == 3:
+                m = nn.Sequential(r3d_18.layer3)
+            if i == 4:
+                m = nn.Sequential(r3d_18.layer4)
+            self.add_module(f"res{i}", m)
+            self.stages.append(m)
+            input_channel = oc
+
+        if not pretrain:
+            for module in self.stages[:2]:
+                for l in module.children():
+                    if isinstance(l, (nn.Conv3d, nn.Conv2d)):
+                        weight_init.c2_msra_fill(l)
 
     def forward(self, x):
         skips = []
@@ -612,7 +693,7 @@ def build_fcos_unet_fpn_backbone(cfg, input_shape: ShapeSpec):
         norm=cfg.MODEL.FPN.NORM,
         top_block=top_block,
         fuse_type=cfg.MODEL.FPN.FUSE_TYPE,
-        lateral_layers=cfg.MODEL.FPN.get('LATERAL_LAYERS',1),
+        lateral_layers=cfg.MODEL.FPN.get("LATERAL_LAYERS", 1),
     )
     return backbone
 
@@ -626,7 +707,11 @@ def build_fcos_res3d_fpn_backbone(cfg, input_shape: ShapeSpec):
     Returns:
         backbone (Backbone): backbone module, must be a subclass of :class:`Backbone`.
     """
-    bottom_up = Resnet3D(cfg, input_shape)
+    bottom_up = (
+        VResNet(cfg, input_shape, cfg.MODEL.VRES.PRETRAIN)
+        if cfg.MODEL.BACKBONE.get("RESNET") == "video"
+        else Resnet3D(cfg, input_shape)
+    )
     in_features = cfg.MODEL.FPN.IN_FEATURES
     out_channels = cfg.MODEL.FPN.OUT_CHANNELS
     top_levels = cfg.MODEL.FCOS.TOP_LEVELS

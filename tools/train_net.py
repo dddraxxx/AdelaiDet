@@ -145,10 +145,16 @@ class Trainer(DefaultTrainer):
             self._hooks = self._hooks[:-2] + self._hooks[-2:][::-1]
         return ret
 
-    def resume_or_load(self, resume=True):
+    def resume_or_load(self, resume=True, show_pretrained=False):
         checkpoint = self.checkpointer.resume_or_load(
             self.cfg.MODEL.WEIGHTS, resume=resume
         )
+        if not resume and show_pretrained:
+            import torchvision.models as models
+            r3d_18 = models.video.r3d_18(pretrained=True)
+            x = torch.rand(1,3,16,16,16)
+            x = r3d_18(x)
+            print(r3d_18, file=open('3dres.js','w'))
         if resume and self.checkpointer.has_checkpoint():
             self.start_iter = checkpoint.get("iteration", -1) + 1
 
@@ -323,7 +329,7 @@ def main(args):
     consider writing your own training loop or subclassing the trainer.
     """
     trainer = Trainer(cfg)
-    trainer.resume_or_load(resume=args.resume)
+    trainer.resume_or_load(resume=args.resume, show_pretrained=cfg.MODEL.get('PRETRAIN', False))
     if cfg.TEST.AUG.ENABLED:
         trainer.register_hooks(
             [hooks.EvalHook(0, lambda: trainer.test_with_TTA(cfg, trainer.model))]

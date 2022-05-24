@@ -22,6 +22,7 @@ MODEL:
   # WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_100_0.96/model_0000149.pth
   # WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_100_0.96_area/model_0000199.pth
   # WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_240_0.96_area/model_0000499.pth
+  WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-BoxInst-hip_bs/model_final.pth
 
   BACKBONE:
     ANTI_ALIAS: false

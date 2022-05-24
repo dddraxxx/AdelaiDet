@@ -46,6 +46,7 @@ def get_generator(cfg=None, mode="train", return_trainer=False):
     if cfg:
         args.p = cfg.DATALOADER.get('PLANS') or args.p
         args.task = str(cfg.DATALOADER.get('TASK')) or args.task
+        args.fold = cfg.DATALOADER.get('FOLD', args.fold) 
     
     task = args.task
     fold = args.fold

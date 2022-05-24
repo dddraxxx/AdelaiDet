@@ -329,11 +329,11 @@ class DynamicMaskHead3D(nn.Module):
 
         # assert mask_feat_stride >= self.mask_out_stride
         # print(mask_feat_stride, self.mask_out_stride)
-        assert mask_feat_stride == self.mask_out_stride
-        # assert mask_feat_stride % self.mask_out_stride == 0
-        # mask_logits = aligned_bilinear3d(
-        #     mask_logits, int(mask_feat_stride / self.mask_out_stride)
-        # )
+        # assert mask_feat_stride == self.mask_out_stride
+        assert mask_feat_stride % self.mask_out_stride == 0
+        mask_logits = aligned_bilinear3d(
+            mask_logits, int(mask_feat_stride / self.mask_out_stride)
+        )
         # Use transpose convolution to make precise prediction
         # mask_logits = self.upsample(mask_logits)
 

@@ -43,11 +43,11 @@ def get_lits_pair(idx=2):
 
 def get_kidney_pair(idx=2):
     template_idx = idx
-    dset = Volumes(0, "/mnt/sdb/nnUNet/Task029_LITS/uinst_stage0/train_{}.npy")
+    dset = Volumes(0, "/mnt/sdb/nnUNet/Task361_KiDsOnly/nnUNetData_plans_v2.1_stage0/case_{:05d}.npy")
     img, gt = dset.get_data(template_idx, read_gt=True, pt=False)
     print("gt has label ", gt.unique())
     # print((gt>0).nonzero())
-    return img, (gt > 0)[:, 50 : 194 - 50].float()  # too large size bad
+    return img, (gt[:, 20:-30, :242//2,-242//2:] == 1).float()  # too large size bad
 
 if __name__ == "__main__":
 
@@ -65,11 +65,12 @@ if __name__ == "__main__":
     #     original_images.size(-2), original_images.size(-1)
     # )[None]
     # gt = bitmask
-
+    item = 'kidney'
     d, gt = get_lits_pair(1)
+    d, gt = get_kidney_pair(2)
     from adet.utils.visualize_niigz import *
 
-    # visulize_3d(gt[0], save_name='ch1.png')
+    visulize_3d(gt[0], save_name='ch1.png')
     model = GriddingReverse(max(gt.shape[-3:])).cuda()
     pc = model(gt.cuda().contiguous())[0]
 
@@ -82,7 +83,7 @@ if __name__ == "__main__":
     # exit(1)
     pc = pc[(pc != 0).any(dim=1)]
     print(pc.shape)
-    save_path = "./template_pc"
+    save_path = f"./{item}"
     with open(save_path, "w") as f:
         for line in pc:
             f.write("{} {} {}\n".format(float(line[0]), float(line[1]), float(line[2])))
@@ -95,7 +96,7 @@ property float32 x
 property float32 y
 property float32 z
 end_header\n""".format(len(pc))
-    with open("./template_pc.ply", "w") as f:
+    with open(f"./{item}.ply", "w") as f:
         f.write(header)
         for line in pc:
             f.write("{} {} {}\n".format(float(line[0]), float(line[1]), float(line[2])))

@@ -460,8 +460,6 @@ class UInst3D(nn.Module):
             )
 
             per_im_boxes = per_im_gt_inst.gt_boxes.tensor
-            if len(per_im_boxes)==0:
-                continue
             per_im_bitmasks = []
             per_im_bitmasks_full = []
             for per_box in per_im_boxes:
@@ -480,6 +478,10 @@ class UInst3D(nn.Module):
 
                 per_im_bitmasks.append(bitmask)
                 per_im_bitmasks_full.append(bitmask_full)
+
+            if len(per_im_boxes)==0:
+                per_im_bitmasks.append(per_im_boxes.new_tensor([]))
+                per_im_bitmasks_full.append(per_im_boxes.new_tensor([]))
 
             per_im_gt_inst.gt_bitmasks = torch.stack(per_im_bitmasks, dim=0)
             per_im_gt_inst.gt_bitmasks_full = torch.stack(per_im_bitmasks_full, dim=0)

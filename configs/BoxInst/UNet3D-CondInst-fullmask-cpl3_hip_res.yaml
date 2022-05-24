@@ -25,7 +25,7 @@ MODEL:
   # WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl-hip/model_0103199.pth
   BACKBONE:
     ANTI_ALIAS: false
-    FREEZE_AT: 2
+    # FREEZE_AT: 2
     NAME: build_fcos_res3d_fpn_backbone
   UINST3D:
     NORMALIZE: false

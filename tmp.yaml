@@ -3,6 +3,7 @@ DATALOADER:
   ASPECT_RATIO_GROUPING: true
   CUTHALF: false
   FILTER_EMPTY_ANNOTATIONS: true
+  FOLD: 0
   NUM_WORKERS: 4
   OVER_SAMPLE: 0.5
   PLANS: uinst
@@ -20,7 +21,7 @@ DATASETS:
 EVAL:
   BG_THRES: 0.5
   PATCH_NMS: true
-  SAVE_DIR: ./validation-raw-condinst-fullmask-inst-cpl-liver-dwsp
+  SAVE_DIR: ./validation-raw-condinst-fullmask-inst-cpl-liver_pre
   STEP_SIZE: 0.25
   USE_GAUSSIAN: false
 GLOBAL:
@@ -64,7 +65,8 @@ MODEL:
   BACKBONE:
     ANTI_ALIAS: false
     FREEZE_AT: 2
-    NAME: build_fcos_unet_fpn_backbone
+    NAME: build_fcos_res3d_fpn_backbone
+    RESNET: video
   BASIS_MODULE:
     ANN_SET: coco
     COMMON_STRIDE: 8
@@ -140,7 +142,6 @@ MODEL:
     MASK_BRANCH:
       CHANNELS: 32
       IN_FEATURES:
-      - p0
       - p1
       - p2
       - p3
@@ -173,14 +174,14 @@ MODEL:
     BOX_QUALITY: iou
     CENTER_SAMPLE: true
     COMPLETE_INST: true
-    CPLNESS_THRES: 0.6
+    CPLNESS_THRES: 0.5
     FPN_STRIDES:
     - 4
     - 8
     - 16
     - 32
     - 64
-    INFERENCE_TH_TEST: 0.5
+    INFERENCE_TH_TEST: 0.6
     INFERENCE_TH_TRAIN: 0.05
     IN_FEATURES:
     - p2
@@ -242,7 +243,6 @@ MODEL:
   FPN:
     FUSE_TYPE: sum
     IN_FEATURES:
-    - res0
     - res1
     - res2
     - res3
@@ -572,16 +572,6 @@ MODEL:
     NAME: conv
   UINST3D:
     NORMALIZE: false
-  UNETD:
-    BASE_CHANNELS: 32
-    MAX_CHANNELS: 320
-    OUT_FEATURES:
-    - res0
-    - res1
-    - res2
-    - res3
-    - res4
-    STAGE_NUM: 5
   VOVNET:
     BACKBONE_OUT_CHANNELS: 256
     CONV_BODY: V-39-eSE
@@ -592,8 +582,17 @@ MODEL:
     - stage3
     - stage4
     - stage5
-  WEIGHTS: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl-liver-dwsp/model_0100999.pth
-OUTPUT_DIR: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl-liver-dwsp
+  VRES:
+    BASE_CHANNELS: 64
+    OUT_FEATURES:
+    - res1
+    - res2
+    - res3
+    - res4
+    PRETRAIN: true
+    STAGE_NUM: 5
+  WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl-liver_pre/model_final.pth
+OUTPUT_DIR: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl-liver_pre
 SEED: -1
 SOLVER:
   AMP:
@@ -609,16 +608,13 @@ SOLVER:
   GAMMA: 0.3
   IMS_PER_BATCH: 2
   LR_SCHEDULER_NAME: WarmupMultiStepLR
-  MAX_ITER: 125000
+  MAX_ITER: 12200
   MOMENTUM: 0.9
   NESTEROV: false
   REFERENCE_WORLD_SIZE: 0
   STEPS:
-  - 2000
-  - 12000
-  - 32000
-  - 62000
-  - 102000
+  - 1500
+  - 11500
   WARMUP_FACTOR: 0.001
   WARMUP_ITERS: 800
   WARMUP_METHOD: linear
