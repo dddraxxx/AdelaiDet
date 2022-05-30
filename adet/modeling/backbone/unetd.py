@@ -498,6 +498,9 @@ class VResNet(Backbone):
 
         out = dict(zip(self.all_features_names, skips))
         return {i: out[i] for i in self._out_features}
+    
+    def _block(self):
+        self.eval()
 
 
 class FPN3D(Backbone):

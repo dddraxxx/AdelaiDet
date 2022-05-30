@@ -427,7 +427,7 @@ class FCOSOutputs3D(nn.Module):
             for i in gt_instances:
                 cpl_inds.extend(i.complete)
             c = instances.cplness_pred.new_tensor(cpl_inds)
-            instances.complete = c[instances.gt_inds] if sum(len(i) for i in gt_instances) else c
+            instances.complete = c[instances.gt_inds] if sum(len(i) for i in gt_instances) else torch.zeros_like(instances.cplness_pred)
 
         if len(top_feats) > 0:
             instances.top_feats = cat(

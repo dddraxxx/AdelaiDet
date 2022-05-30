@@ -1,15 +1,13 @@
 CUDNN_BENCHMARK: false
 DATALOADER:
   ASPECT_RATIO_GROUPING: true
-  CUTHALF: false
   FILTER_EMPTY_ANNOTATIONS: true
   FOLD: 0
   NUM_WORKERS: 4
   OVER_SAMPLE: 0.5
-  PLANS: uinst
   REPEAT_THRESHOLD: 0.0
   SAMPLER_TRAIN: TrainingSampler
-  TASK: 029
+  TASK: 363
   TYPE: nnunet
 DATASETS:
   PRECOMPUTED_PROPOSAL_TOPK_TEST: 1000
@@ -21,7 +19,7 @@ DATASETS:
 EVAL:
   BG_THRES: 0.5
   PATCH_NMS: true
-  SAVE_DIR: ./validation-raw-condinst-fullmask-inst-cpl-liver_pre
+  SAVE_DIR: ./validation-raw-condinst-fullmask-inst-cpl-hip_pre2
   STEP_SIZE: 0.25
   USE_GAUSSIAN: false
 GLOBAL:
@@ -65,6 +63,7 @@ MODEL:
   BACKBONE:
     ANTI_ALIAS: false
     FREEZE_AT: 2
+    FREEZE_TILL: 300
     NAME: build_fcos_res3d_fpn_backbone
     RESNET: video
   BASIS_MODULE:
@@ -181,7 +180,7 @@ MODEL:
     - 16
     - 32
     - 64
-    INFERENCE_TH_TEST: 0.6
+    INFERENCE_TH_TEST: 0.5
     INFERENCE_TH_TRAIN: 0.05
     IN_FEATURES:
     - p2
@@ -591,8 +590,8 @@ MODEL:
     - res4
     PRETRAIN: true
     STAGE_NUM: 5
-  WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl-liver_pre/model_final.pth
-OUTPUT_DIR: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl-liver_pre
+  WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl-hip_pre2/model_final.pth
+OUTPUT_DIR: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl-hip_pre2
 SEED: -1
 SOLVER:
   AMP:

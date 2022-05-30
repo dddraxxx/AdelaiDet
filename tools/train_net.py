@@ -114,11 +114,59 @@ class random2D(Dataset):
         return self.length
 
 
+from detectron2.engine import HookBase
+
+
+class Freezer(HookBase):
+    """backbone freezer"""
+
+    def __init__(self, cfg):
+        self.freeze_iter = cfg.MODEL.BACKBONE.get("FREEZE_TILL")
+        self.freeze_name = "bottom_up"
+
+    def before_step(self):
+        if self.trainer.iter + 1 <= self.freeze_iter:
+            for n, m in self.trainer.model.named_modules():
+                if self.freeze_name in n:
+                    # print('freeze {}'.format(n))
+                    for a in m.parameters():
+                        a.require_grad = True
+                    # m.eval()
+        if self.trainer.iter + 1 > self.freeze_iter:
+            # self.trainer.model.train()
+            for n, m in self.trainer.model.named_modules():
+                for a in m.parameters():
+                    a.require_grad = True
+
+from detectron2.solver.build import maybe_add_gradient_clipping, get_default_optimizer_params
+from build_optimizer import get_optimizer_params
 class Trainer(DefaultTrainer):
     """
     This is the same Trainer except that we rewrite the
     `build_train_loader`/`resume_or_load` method.
     """
+
+    @classmethod
+    def build_optimizer(cls, cfg, model):
+        params = get_optimizer_params(
+            model,
+            base_lr=cfg.SOLVER.BASE_LR,
+            weight_decay_norm=cfg.SOLVER.WEIGHT_DECAY_NORM,
+            bias_lr_factor=cfg.SOLVER.BIAS_LR_FACTOR,
+            weight_decay_bias=cfg.SOLVER.WEIGHT_DECAY_BIAS,
+            overrides={"bottom_up":{"lr": cfg.SOLVER.get("LR_RATIO_BOTTOM_UP", 1) * cfg.SOLVER.BASE_LR}}
+        )
+        return maybe_add_gradient_clipping(cfg, torch.optim.SGD)(
+            params,
+            lr=cfg.SOLVER.BASE_LR,
+            momentum=cfg.SOLVER.MOMENTUM,
+            nesterov=cfg.SOLVER.NESTEROV,
+            weight_decay=cfg.SOLVER.WEIGHT_DECAY,
+        )
+
+    def add_hook(self, hook):
+        self.register_hooks([hook])
+        self._hooks = self._hooks[:-2] + self._hooks[-2:][::-1]
 
     def build_hooks(self):
         """
@@ -139,10 +187,13 @@ class Trainer(DefaultTrainer):
                 ret[i] = hooks.PeriodicCheckpointer(
                     self.checkpointer, self.cfg.SOLVER.CHECKPOINT_PERIOD
                 )
-        if self.cfg.get('VAL') and self.cfg.VAL.ENABLED:
+        if self.cfg.get("VAL") and self.cfg.VAL.ENABLED:
             self.val_hook = build_val_hook(self.cfg)
-            self.register_hooks([self.val_hook])
-            self._hooks = self._hooks[:-2] + self._hooks[-2:][::-1]
+            self.add_hook(self.val_hook)
+
+        if self.cfg.MODEL.BACKBONE.get("FREEZE_TILL", 0) > 0:
+            self.freeze_hook = Freezer(self.cfg)
+            self.add_hook(self.freeze_hook)
         return ret
 
     def resume_or_load(self, resume=True, show_pretrained=False):
@@ -151,10 +202,11 @@ class Trainer(DefaultTrainer):
         )
         if not resume and show_pretrained:
             import torchvision.models as models
+
             r3d_18 = models.video.r3d_18(pretrained=True)
-            x = torch.rand(1,3,16,16,16)
+            x = torch.rand(1, 3, 16, 16, 16)
             x = r3d_18(x)
-            print(r3d_18, file=open('3dres.js','w'))
+            print(r3d_18, file=open("3dres.js", "w"))
         if resume and self.checkpointer.has_checkpoint():
             self.start_iter = checkpoint.get("iteration", -1) + 1
 
@@ -209,7 +261,7 @@ class Trainer(DefaultTrainer):
         total_len = (
             cfg.SOLVER.MAX_ITER * cfg.SOLVER.IMS_PER_BATCH * comm.get_world_size()
         )
-        if cfg.DATALOADER.get('TYPE') == "nnunet":
+        if cfg.DATALOADER.get("TYPE") == "nnunet":
             return nnUNet_loader(cfg)
         if (
             "3d" not in cfg.MODEL.META_ARCHITECTURE.lower()
@@ -329,7 +381,9 @@ def main(args):
     consider writing your own training loop or subclassing the trainer.
     """
     trainer = Trainer(cfg)
-    trainer.resume_or_load(resume=args.resume, show_pretrained=cfg.MODEL.get('PRETRAIN', False))
+    trainer.resume_or_load(
+        resume=args.resume, show_pretrained=cfg.MODEL.get("PRETRAIN", False)
+    )
     if cfg.TEST.AUG.ENABLED:
         trainer.register_hooks(
             [hooks.EvalHook(0, lambda: trainer.test_with_TTA(cfg, trainer.model))]
@@ -346,14 +400,21 @@ def main(args):
         ),
         file=open("3d_network.js", "a"),
     )
+
     def modelsize_dict(model):
         dct = {}
-        dct.update(size=sum(p.nelement() * p.element_size() for p in model.parameters()))
+        dct.update(
+            size=sum(p.nelement() * p.element_size() for p in model.parameters())
+        )
         dct.update(dict((n, modelsize_dict(m)) for n, m in model.named_children()))
-        dct = {model._get_name():dct}
+        dct = {model._get_name(): dct}
         return dct
+
     msize = modelsize_dict(model)
-    pprint(msize, open("3d_network.js", "a"), )
+    pprint(
+        msize,
+        open("3d_network.js", "a"),
+    )
 
     return trainer.train()
 
