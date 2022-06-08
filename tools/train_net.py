@@ -191,7 +191,7 @@ class Trainer(DefaultTrainer):
             self.val_hook = build_val_hook(self.cfg)
             self.add_hook(self.val_hook)
 
-        if self.cfg.MODEL.BACKBONE.get("FREEZE_TILL", 0) > 0:
+        if self.cfg.MODEL.BACKBOEN.get('PRETRAIN', False) and self.cfg.MODEL.BACKBONE.get("FREEZE_TILL", 0) > 0:
             self.freeze_hook = Freezer(self.cfg)
             self.add_hook(self.freeze_hook)
         return ret

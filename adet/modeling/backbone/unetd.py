@@ -26,6 +26,8 @@ import torch.nn.functional as F
 from detectron2.modeling.backbone import BACKBONE_REGISTRY
 from detectron2.modeling.backbone.backbone import Backbone
 
+from adet.modeling.backbone.bit_res import get_pretrain_res3d
+
 INF = 100000000
 
 
@@ -438,6 +440,66 @@ class Cat(nn.Module):
     def forward(self, x):
         return torch.cat([x] * self.n, dim=1)
 
+class GeneralRes3D(Backbone):
+    """Same as r3d-18"""
+
+    def __init__(self, cfg, input_shape, pretrain=False):
+        super().__init__()
+        stage_num = cfg.MODEL.VRES.STAGE_NUM
+        base_channel = cfg.MODEL.VRES.BASE_CHANNELS
+        max_channel = 1e8
+        input_channel = input_shape.channels
+        self._out_features = cfg.MODEL.VRES.OUT_FEATURES
+
+        self.all_features_channels = [3] + [64, 256, 512, 1024]
+            # min(base_channel * 4** i, max_channel) for i in range(stage_num - 1)
+        self.per_strides = [1] + [2] * (stage_num - 1)
+        prod = lambda x: reduce(operator.mul, x, 1)
+        self.strides = [prod(self.per_strides[: i + 1]) for i in range(stage_num)]
+
+        self.all_features_names = [f"res{i}" for i in range(stage_num)]
+        self._out_feature_channels = dict(
+            zip(self.all_features_names, self.all_features_channels)
+        )
+        self._out_feature_strides = dict(zip(self.all_features_names, self.strides))
+        self._size_divisibility = 2 ** (stage_num - 1)
+
+        res2d = get_pretrain_res3d(cfg.MODEL.VRES.PRETRAIN_WAYS if pretrain else None)
+        self.stages = []
+        for i in range(stage_num):
+            oc = self.all_features_channels[i]
+            ic = input_channel
+            if i == 0:
+                m = Cat(3)
+            if i == 1:
+                m = nn.Sequential(res2d.root)
+            if i == 2:
+                m = nn.Sequential(res2d.body.block1)
+            if i == 3:
+                m = nn.Sequential(res2d.body.block2)
+            if i == 4:
+                m = nn.Sequential(res2d.body.block3)
+            self.add_module(f"res{i}", m)
+            self.stages.append(m)
+            input_channel = oc
+
+        if not pretrain:
+            for module in self.stages[:2]:
+                for l in module.children():
+                    if isinstance(l, (nn.Conv3d, nn.Conv2d)):
+                        weight_init.c2_msra_fill(l)
+
+    def forward(self, x):
+        skips = []
+        for d in self.stages:
+            x = d(x)
+            skips.append(x)
+
+        out = dict(zip(self.all_features_names, skips))
+        return {i: out[i] for i in self._out_features}
+    
+    def _block(self):
+        self.eval()
 
 class VResNet(Backbone):
     """Same as r3d-18"""
@@ -710,11 +772,14 @@ def build_fcos_res3d_fpn_backbone(cfg, input_shape: ShapeSpec):
     Returns:
         backbone (Backbone): backbone module, must be a subclass of :class:`Backbone`.
     """
-    bottom_up = (
-        VResNet(cfg, input_shape, cfg.MODEL.VRES.PRETRAIN)
-        if cfg.MODEL.BACKBONE.get("RESNET") == "video"
-        else Resnet3D(cfg, input_shape)
-    )
+    if cfg.MODEL.BACKBONE.get("RESNET") == "video":
+        bottom_up = (
+            VResNet(cfg, input_shape, cfg.MODEL.BACKBONE.PRETRAIN)
+        )
+    elif cfg.MODEL.BACKBONE.get("RESNET") == "BIT":
+        bottom_up = GeneralRes3D(cfg, input_shape, cfg.MODEL.BACKBONE.PRETRAIN)
+    else:
+        bottom_up = Resnet3D(cfg, input_shape)
     in_features = cfg.MODEL.FPN.IN_FEATURES
     out_channels = cfg.MODEL.FPN.OUT_CHANNELS
     top_levels = cfg.MODEL.FCOS.TOP_LEVELS

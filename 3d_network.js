@@ -2,143 +2,153 @@ UInst3D(
   (backbone): FPN3D(
     (fpn_lateral1): Conv3d(64, 128, kernel_size=(1, 1, 1), stride=(1, 1, 1))
     (fpn_output1): Conv3d(128, 128, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
-    (fpn_lateral2): Conv3d(128, 128, kernel_size=(1, 1, 1), stride=(1, 1, 1))
+    (fpn_lateral2): Conv3d(256, 128, kernel_size=(1, 1, 1), stride=(1, 1, 1))
     (fpn_output2): Conv3d(128, 128, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
-    (fpn_lateral3): Conv3d(256, 128, kernel_size=(1, 1, 1), stride=(1, 1, 1))
+    (fpn_lateral3): Conv3d(512, 128, kernel_size=(1, 1, 1), stride=(1, 1, 1))
     (fpn_output3): Conv3d(128, 128, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
-    (fpn_lateral4): Conv3d(512, 128, kernel_size=(1, 1, 1), stride=(1, 1, 1))
+    (fpn_lateral4): Conv3d(1024, 128, kernel_size=(1, 1, 1), stride=(1, 1, 1))
     (fpn_output4): Conv3d(128, 128, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
     (top_block): LastLevelP6P7(
       (p6): Conv3d(128, 128, kernel_size=(3, 3, 3), stride=(2, 2, 2), padding=(1, 1, 1))
       (p7): Conv3d(128, 128, kernel_size=(3, 3, 3), stride=(2, 2, 2), padding=(1, 1, 1))
     )
-    (bottom_up): VResNet(
+    (bottom_up): GeneralRes3D(
       (res0): Cat()
       (res1): Sequential(
-        (0): BasicStem(
-          (0): Conv3d(3, 64, kernel_size=(3, 7, 7), stride=(2, 2, 2), padding=(1, 3, 3), bias=False)
-          (1): BatchNorm3d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-          (2): ReLU(inplace=True)
-        )
-        (1): Sequential(
-          (0): BasicBlock(
-            (conv1): Sequential(
-              (0): Conv3DSimple(64, 64, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1), bias=False)
-              (1): BatchNorm3d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-              (2): ReLU(inplace=True)
-            )
-            (conv2): Sequential(
-              (0): Conv3DSimple(64, 64, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1), bias=False)
-              (1): BatchNorm3d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-            )
-            (relu): ReLU(inplace=True)
-          )
-          (1): BasicBlock(
-            (conv1): Sequential(
-              (0): Conv3DSimple(64, 64, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1), bias=False)
-              (1): BatchNorm3d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-              (2): ReLU(inplace=True)
-            )
-            (conv2): Sequential(
-              (0): Conv3DSimple(64, 64, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1), bias=False)
-              (1): BatchNorm3d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-            )
-            (relu): ReLU(inplace=True)
-          )
+        (0): Sequential(
+          (conv): StdConv3d(3, 64, kernel_size=(7, 7, 7), stride=(2, 2, 2), padding=(3, 3, 3), bias=False)
         )
       )
       (res2): Sequential(
         (0): Sequential(
-          (0): BasicBlock(
-            (conv1): Sequential(
-              (0): Conv3DSimple(64, 128, kernel_size=(3, 3, 3), stride=(2, 2, 2), padding=(1, 1, 1), bias=False)
-              (1): BatchNorm3d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-              (2): ReLU(inplace=True)
-            )
-            (conv2): Sequential(
-              (0): Conv3DSimple(128, 128, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1), bias=False)
-              (1): BatchNorm3d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-            )
+          (pad): ConstantPad3d(padding=(1, 1, 1, 1, 1, 1), value=0)
+          (pool): MaxPool3d(kernel_size=3, stride=2, padding=0, dilation=1, ceil_mode=False)
+          (unit01): PreActBottleneck(
+            (gn1): GroupNorm(32, 64, eps=1e-05, affine=True)
+            (conv1): StdConv3d(64, 64, kernel_size=(1, 1, 1), stride=(1, 1, 1), bias=False)
+            (gn2): GroupNorm(32, 64, eps=1e-05, affine=True)
+            (conv2): StdConv3d(64, 64, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1), bias=False)
+            (gn3): GroupNorm(32, 64, eps=1e-05, affine=True)
+            (conv3): StdConv3d(64, 256, kernel_size=(1, 1, 1), stride=(1, 1, 1), bias=False)
             (relu): ReLU(inplace=True)
-            (downsample): Sequential(
-              (0): Conv3d(64, 128, kernel_size=(1, 1, 1), stride=(2, 2, 2), bias=False)
-              (1): BatchNorm3d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-            )
+            (downsample): StdConv3d(64, 256, kernel_size=(1, 1, 1), stride=(1, 1, 1), bias=False)
           )
-          (1): BasicBlock(
-            (conv1): Sequential(
-              (0): Conv3DSimple(128, 128, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1), bias=False)
-              (1): BatchNorm3d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-              (2): ReLU(inplace=True)
-            )
-            (conv2): Sequential(
-              (0): Conv3DSimple(128, 128, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1), bias=False)
-              (1): BatchNorm3d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-            )
+          (unit02): PreActBottleneck(
+            (gn1): GroupNorm(32, 256, eps=1e-05, affine=True)
+            (conv1): StdConv3d(256, 64, kernel_size=(1, 1, 1), stride=(1, 1, 1), bias=False)
+            (gn2): GroupNorm(32, 64, eps=1e-05, affine=True)
+            (conv2): StdConv3d(64, 64, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1), bias=False)
+            (gn3): GroupNorm(32, 64, eps=1e-05, affine=True)
+            (conv3): StdConv3d(64, 256, kernel_size=(1, 1, 1), stride=(1, 1, 1), bias=False)
+            (relu): ReLU(inplace=True)
+          )
+          (unit03): PreActBottleneck(
+            (gn1): GroupNorm(32, 256, eps=1e-05, affine=True)
+            (conv1): StdConv3d(256, 64, kernel_size=(1, 1, 1), stride=(1, 1, 1), bias=False)
+            (gn2): GroupNorm(32, 64, eps=1e-05, affine=True)
+            (conv2): StdConv3d(64, 64, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1), bias=False)
+            (gn3): GroupNorm(32, 64, eps=1e-05, affine=True)
+            (conv3): StdConv3d(64, 256, kernel_size=(1, 1, 1), stride=(1, 1, 1), bias=False)
             (relu): ReLU(inplace=True)
           )
         )
       )
       (res3): Sequential(
         (0): Sequential(
-          (0): BasicBlock(
-            (conv1): Sequential(
-              (0): Conv3DSimple(128, 256, kernel_size=(3, 3, 3), stride=(2, 2, 2), padding=(1, 1, 1), bias=False)
-              (1): BatchNorm3d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-              (2): ReLU(inplace=True)
-            )
-            (conv2): Sequential(
-              (0): Conv3DSimple(256, 256, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1), bias=False)
-              (1): BatchNorm3d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-            )
+          (unit01): PreActBottleneck(
+            (gn1): GroupNorm(32, 256, eps=1e-05, affine=True)
+            (conv1): StdConv3d(256, 128, kernel_size=(1, 1, 1), stride=(1, 1, 1), bias=False)
+            (gn2): GroupNorm(32, 128, eps=1e-05, affine=True)
+            (conv2): StdConv3d(128, 128, kernel_size=(3, 3, 3), stride=(2, 2, 2), padding=(1, 1, 1), bias=False)
+            (gn3): GroupNorm(32, 128, eps=1e-05, affine=True)
+            (conv3): StdConv3d(128, 512, kernel_size=(1, 1, 1), stride=(1, 1, 1), bias=False)
             (relu): ReLU(inplace=True)
-            (downsample): Sequential(
-              (0): Conv3d(128, 256, kernel_size=(1, 1, 1), stride=(2, 2, 2), bias=False)
-              (1): BatchNorm3d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-            )
+            (downsample): StdConv3d(256, 512, kernel_size=(1, 1, 1), stride=(2, 2, 2), bias=False)
           )
-          (1): BasicBlock(
-            (conv1): Sequential(
-              (0): Conv3DSimple(256, 256, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1), bias=False)
-              (1): BatchNorm3d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-              (2): ReLU(inplace=True)
-            )
-            (conv2): Sequential(
-              (0): Conv3DSimple(256, 256, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1), bias=False)
-              (1): BatchNorm3d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-            )
+          (unit02): PreActBottleneck(
+            (gn1): GroupNorm(32, 512, eps=1e-05, affine=True)
+            (conv1): StdConv3d(512, 128, kernel_size=(1, 1, 1), stride=(1, 1, 1), bias=False)
+            (gn2): GroupNorm(32, 128, eps=1e-05, affine=True)
+            (conv2): StdConv3d(128, 128, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1), bias=False)
+            (gn3): GroupNorm(32, 128, eps=1e-05, affine=True)
+            (conv3): StdConv3d(128, 512, kernel_size=(1, 1, 1), stride=(1, 1, 1), bias=False)
+            (relu): ReLU(inplace=True)
+          )
+          (unit03): PreActBottleneck(
+            (gn1): GroupNorm(32, 512, eps=1e-05, affine=True)
+            (conv1): StdConv3d(512, 128, kernel_size=(1, 1, 1), stride=(1, 1, 1), bias=False)
+            (gn2): GroupNorm(32, 128, eps=1e-05, affine=True)
+            (conv2): StdConv3d(128, 128, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1), bias=False)
+            (gn3): GroupNorm(32, 128, eps=1e-05, affine=True)
+            (conv3): StdConv3d(128, 512, kernel_size=(1, 1, 1), stride=(1, 1, 1), bias=False)
+            (relu): ReLU(inplace=True)
+          )
+          (unit04): PreActBottleneck(
+            (gn1): GroupNorm(32, 512, eps=1e-05, affine=True)
+            (conv1): StdConv3d(512, 128, kernel_size=(1, 1, 1), stride=(1, 1, 1), bias=False)
+            (gn2): GroupNorm(32, 128, eps=1e-05, affine=True)
+            (conv2): StdConv3d(128, 128, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1), bias=False)
+            (gn3): GroupNorm(32, 128, eps=1e-05, affine=True)
+            (conv3): StdConv3d(128, 512, kernel_size=(1, 1, 1), stride=(1, 1, 1), bias=False)
             (relu): ReLU(inplace=True)
           )
         )
       )
       (res4): Sequential(
         (0): Sequential(
-          (0): BasicBlock(
-            (conv1): Sequential(
-              (0): Conv3DSimple(256, 512, kernel_size=(3, 3, 3), stride=(2, 2, 2), padding=(1, 1, 1), bias=False)
-              (1): BatchNorm3d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-              (2): ReLU(inplace=True)
-            )
-            (conv2): Sequential(
-              (0): Conv3DSimple(512, 512, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1), bias=False)
-              (1): BatchNorm3d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-            )
+          (unit01): PreActBottleneck(
+            (gn1): GroupNorm(32, 512, eps=1e-05, affine=True)
+            (conv1): StdConv3d(512, 256, kernel_size=(1, 1, 1), stride=(1, 1, 1), bias=False)
+            (gn2): GroupNorm(32, 256, eps=1e-05, affine=True)
+            (conv2): StdConv3d(256, 256, kernel_size=(3, 3, 3), stride=(2, 2, 2), padding=(1, 1, 1), bias=False)
+            (gn3): GroupNorm(32, 256, eps=1e-05, affine=True)
+            (conv3): StdConv3d(256, 1024, kernel_size=(1, 1, 1), stride=(1, 1, 1), bias=False)
             (relu): ReLU(inplace=True)
-            (downsample): Sequential(
-              (0): Conv3d(256, 512, kernel_size=(1, 1, 1), stride=(2, 2, 2), bias=False)
-              (1): BatchNorm3d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-            )
+            (downsample): StdConv3d(512, 1024, kernel_size=(1, 1, 1), stride=(2, 2, 2), bias=False)
           )
-          (1): BasicBlock(
-            (conv1): Sequential(
-              (0): Conv3DSimple(512, 512, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1), bias=False)
-              (1): BatchNorm3d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-              (2): ReLU(inplace=True)
-            )
-            (conv2): Sequential(
-              (0): Conv3DSimple(512, 512, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1), bias=False)
-              (1): BatchNorm3d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-            )
+          (unit02): PreActBottleneck(
+            (gn1): GroupNorm(32, 1024, eps=1e-05, affine=True)
+            (conv1): StdConv3d(1024, 256, kernel_size=(1, 1, 1), stride=(1, 1, 1), bias=False)
+            (gn2): GroupNorm(32, 256, eps=1e-05, affine=True)
+            (conv2): StdConv3d(256, 256, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1), bias=False)
+            (gn3): GroupNorm(32, 256, eps=1e-05, affine=True)
+            (conv3): StdConv3d(256, 1024, kernel_size=(1, 1, 1), stride=(1, 1, 1), bias=False)
+            (relu): ReLU(inplace=True)
+          )
+          (unit03): PreActBottleneck(
+            (gn1): GroupNorm(32, 1024, eps=1e-05, affine=True)
+            (conv1): StdConv3d(1024, 256, kernel_size=(1, 1, 1), stride=(1, 1, 1), bias=False)
+            (gn2): GroupNorm(32, 256, eps=1e-05, affine=True)
+            (conv2): StdConv3d(256, 256, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1), bias=False)
+            (gn3): GroupNorm(32, 256, eps=1e-05, affine=True)
+            (conv3): StdConv3d(256, 1024, kernel_size=(1, 1, 1), stride=(1, 1, 1), bias=False)
+            (relu): ReLU(inplace=True)
+          )
+          (unit04): PreActBottleneck(
+            (gn1): GroupNorm(32, 1024, eps=1e-05, affine=True)
+            (conv1): StdConv3d(1024, 256, kernel_size=(1, 1, 1), stride=(1, 1, 1), bias=False)
+            (gn2): GroupNorm(32, 256, eps=1e-05, affine=True)
+            (conv2): StdConv3d(256, 256, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1), bias=False)
+            (gn3): GroupNorm(32, 256, eps=1e-05, affine=True)
+            (conv3): StdConv3d(256, 1024, kernel_size=(1, 1, 1), stride=(1, 1, 1), bias=False)
+            (relu): ReLU(inplace=True)
+          )
+          (unit05): PreActBottleneck(
+            (gn1): GroupNorm(32, 1024, eps=1e-05, affine=True)
+            (conv1): StdConv3d(1024, 256, kernel_size=(1, 1, 1), stride=(1, 1, 1), bias=False)
+            (gn2): GroupNorm(32, 256, eps=1e-05, affine=True)
+            (conv2): StdConv3d(256, 256, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1), bias=False)
+            (gn3): GroupNorm(32, 256, eps=1e-05, affine=True)
+            (conv3): StdConv3d(256, 1024, kernel_size=(1, 1, 1), stride=(1, 1, 1), bias=False)
+            (relu): ReLU(inplace=True)
+          )
+          (unit06): PreActBottleneck(
+            (gn1): GroupNorm(32, 1024, eps=1e-05, affine=True)
+            (conv1): StdConv3d(1024, 256, kernel_size=(1, 1, 1), stride=(1, 1, 1), bias=False)
+            (gn2): GroupNorm(32, 256, eps=1e-05, affine=True)
+            (conv2): StdConv3d(256, 256, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1), bias=False)
+            (gn3): GroupNorm(32, 256, eps=1e-05, affine=True)
+            (conv3): StdConv3d(256, 1024, kernel_size=(1, 1, 1), stride=(1, 1, 1), bias=False)
             (relu): ReLU(inplace=True)
           )
         )
@@ -229,111 +239,136 @@ UInst3D(
   )
   (controller): Conv3d(128, 177, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
 )
-model buff size: 0.038MB, model param size:154.878MB
-{'UInst3D': {'backbone': {'FPN3D': {'bottom_up': {'VResNet': {'res0': {'Cat': {'size': 0}},
-                                                              'res1': {'Sequential': {'0': {'BasicStem': {'0': {'Conv3d': {'size': 112896}},
-                                                                                                          '1': {'BatchNorm3d': {'size': 512}},
-                                                                                                          '2': {'ReLU': {'size': 0}},
-                                                                                                          'size': 113408}},
-                                                                                      '1': {'Sequential': {'0': {'BasicBlock': {'conv1': {'Sequential': {'0': {'Conv3DSimple': {'size': 442368}},
-                                                                                                                                                         '1': {'BatchNorm3d': {'size': 512}},
-                                                                                                                                                         '2': {'ReLU': {'size': 0}},
-                                                                                                                                                         'size': 442880}},
-                                                                                                                                'conv2': {'Sequential': {'0': {'Conv3DSimple': {'size': 442368}},
-                                                                                                                                                         '1': {'BatchNorm3d': {'size': 512}},
-                                                                                                                                                         'size': 442880}},
-                                                                                                                                'relu': {'ReLU': {'size': 0}},
-                                                                                                                                'size': 885760}},
-                                                                                                           '1': {'BasicBlock': {'conv1': {'Sequential': {'0': {'Conv3DSimple': {'size': 442368}},
-                                                                                                                                                         '1': {'BatchNorm3d': {'size': 512}},
-                                                                                                                                                         '2': {'ReLU': {'size': 0}},
-                                                                                                                                                         'size': 442880}},
-                                                                                                                                'conv2': {'Sequential': {'0': {'Conv3DSimple': {'size': 442368}},
-                                                                                                                                                         '1': {'BatchNorm3d': {'size': 512}},
-                                                                                                                                                         'size': 442880}},
-                                                                                                                                'relu': {'ReLU': {'size': 0}},
-                                                                                                                                'size': 885760}},
-                                                                                                           'size': 1771520}},
-                                                                                      'size': 1884928}},
-                                                              'res2': {'Sequential': {'0': {'Sequential': {'0': {'BasicBlock': {'conv1': {'Sequential': {'0': {'Conv3DSimple': {'size': 884736}},
-                                                                                                                                                         '1': {'BatchNorm3d': {'size': 1024}},
-                                                                                                                                                         '2': {'ReLU': {'size': 0}},
-                                                                                                                                                         'size': 885760}},
-                                                                                                                                'conv2': {'Sequential': {'0': {'Conv3DSimple': {'size': 1769472}},
-                                                                                                                                                         '1': {'BatchNorm3d': {'size': 1024}},
-                                                                                                                                                         'size': 1770496}},
-                                                                                                                                'downsample': {'Sequential': {'0': {'Conv3d': {'size': 32768}},
-                                                                                                                                                              '1': {'BatchNorm3d': {'size': 1024}},
-                                                                                                                                                              'size': 33792}},
-                                                                                                                                'relu': {'ReLU': {'size': 0}},
-                                                                                                                                'size': 2690048}},
-                                                                                                           '1': {'BasicBlock': {'conv1': {'Sequential': {'0': {'Conv3DSimple': {'size': 1769472}},
-                                                                                                                                                         '1': {'BatchNorm3d': {'size': 1024}},
-                                                                                                                                                         '2': {'ReLU': {'size': 0}},
-                                                                                                                                                         'size': 1770496}},
-                                                                                                                                'conv2': {'Sequential': {'0': {'Conv3DSimple': {'size': 1769472}},
-                                                                                                                                                         '1': {'BatchNorm3d': {'size': 1024}},
-                                                                                                                                                         'size': 1770496}},
-                                                                                                                                'relu': {'ReLU': {'size': 0}},
-                                                                                                                                'size': 3540992}},
-                                                                                                           'size': 6231040}},
-                                                                                      'size': 6231040}},
-                                                              'res3': {'Sequential': {'0': {'Sequential': {'0': {'BasicBlock': {'conv1': {'Sequential': {'0': {'Conv3DSimple': {'size': 3538944}},
-                                                                                                                                                         '1': {'BatchNorm3d': {'size': 2048}},
-                                                                                                                                                         '2': {'ReLU': {'size': 0}},
-                                                                                                                                                         'size': 3540992}},
-                                                                                                                                'conv2': {'Sequential': {'0': {'Conv3DSimple': {'size': 7077888}},
-                                                                                                                                                         '1': {'BatchNorm3d': {'size': 2048}},
-                                                                                                                                                         'size': 7079936}},
-                                                                                                                                'downsample': {'Sequential': {'0': {'Conv3d': {'size': 131072}},
-                                                                                                                                                              '1': {'BatchNorm3d': {'size': 2048}},
-                                                                                                                                                              'size': 133120}},
-                                                                                                                                'relu': {'ReLU': {'size': 0}},
-                                                                                                                                'size': 10754048}},
-                                                                                                           '1': {'BasicBlock': {'conv1': {'Sequential': {'0': {'Conv3DSimple': {'size': 7077888}},
-                                                                                                                                                         '1': {'BatchNorm3d': {'size': 2048}},
-                                                                                                                                                         '2': {'ReLU': {'size': 0}},
-                                                                                                                                                         'size': 7079936}},
-                                                                                                                                'conv2': {'Sequential': {'0': {'Conv3DSimple': {'size': 7077888}},
-                                                                                                                                                         '1': {'BatchNorm3d': {'size': 2048}},
-                                                                                                                                                         'size': 7079936}},
-                                                                                                                                'relu': {'ReLU': {'size': 0}},
-                                                                                                                                'size': 14159872}},
-                                                                                                           'size': 24913920}},
-                                                                                      'size': 24913920}},
-                                                              'res4': {'Sequential': {'0': {'Sequential': {'0': {'BasicBlock': {'conv1': {'Sequential': {'0': {'Conv3DSimple': {'size': 14155776}},
-                                                                                                                                                         '1': {'BatchNorm3d': {'size': 4096}},
-                                                                                                                                                         '2': {'ReLU': {'size': 0}},
-                                                                                                                                                         'size': 14159872}},
-                                                                                                                                'conv2': {'Sequential': {'0': {'Conv3DSimple': {'size': 28311552}},
-                                                                                                                                                         '1': {'BatchNorm3d': {'size': 4096}},
-                                                                                                                                                         'size': 28315648}},
-                                                                                                                                'downsample': {'Sequential': {'0': {'Conv3d': {'size': 524288}},
-                                                                                                                                                              '1': {'BatchNorm3d': {'size': 4096}},
-                                                                                                                                                              'size': 528384}},
-                                                                                                                                'relu': {'ReLU': {'size': 0}},
-                                                                                                                                'size': 43003904}},
-                                                                                                           '1': {'BasicBlock': {'conv1': {'Sequential': {'0': {'Conv3DSimple': {'size': 28311552}},
-                                                                                                                                                         '1': {'BatchNorm3d': {'size': 4096}},
-                                                                                                                                                         '2': {'ReLU': {'size': 0}},
-                                                                                                                                                         'size': 28315648}},
-                                                                                                                                'conv2': {'Sequential': {'0': {'Conv3DSimple': {'size': 28311552}},
-                                                                                                                                                         '1': {'BatchNorm3d': {'size': 4096}},
-                                                                                                                                                         'size': 28315648}},
-                                                                                                                                'relu': {'ReLU': {'size': 0}},
-                                                                                                                                'size': 56631296}},
-                                                                                                           'size': 99635200}},
-                                                                                      'size': 99635200}},
-                                                              'size': 132665088}},
+model buff size: 0.001MB, model param size:93.924MB
+{'UInst3D': {'backbone': {'FPN3D': {'bottom_up': {'GeneralRes3D': {'res0': {'Cat': {'size': 0}},
+                                                                   'res1': {'Sequential': {'0': {'Sequential': {'conv': {'StdConv3d': {'size': 263424}},
+                                                                                                                'size': 263424}},
+                                                                                           'size': 263424}},
+                                                                   'res2': {'Sequential': {'0': {'Sequential': {'pad': {'ConstantPad3d': {'size': 0}},
+                                                                                                                'pool': {'MaxPool3d': {'size': 0}},
+                                                                                                                'size': 1744384,
+                                                                                                                'unit01': {'PreActBottleneck': {'conv1': {'StdConv3d': {'size': 16384}},
+                                                                                                                                                'conv2': {'StdConv3d': {'size': 442368}},
+                                                                                                                                                'conv3': {'StdConv3d': {'size': 65536}},
+                                                                                                                                                'downsample': {'StdConv3d': {'size': 65536}},
+                                                                                                                                                'gn1': {'GroupNorm': {'size': 512}},
+                                                                                                                                                'gn2': {'GroupNorm': {'size': 512}},
+                                                                                                                                                'gn3': {'GroupNorm': {'size': 512}},
+                                                                                                                                                'relu': {'ReLU': {'size': 0}},
+                                                                                                                                                'size': 591360}},
+                                                                                                                'unit02': {'PreActBottleneck': {'conv1': {'StdConv3d': {'size': 65536}},
+                                                                                                                                                'conv2': {'StdConv3d': {'size': 442368}},
+                                                                                                                                                'conv3': {'StdConv3d': {'size': 65536}},
+                                                                                                                                                'gn1': {'GroupNorm': {'size': 2048}},
+                                                                                                                                                'gn2': {'GroupNorm': {'size': 512}},
+                                                                                                                                                'gn3': {'GroupNorm': {'size': 512}},
+                                                                                                                                                'relu': {'ReLU': {'size': 0}},
+                                                                                                                                                'size': 576512}},
+                                                                                                                'unit03': {'PreActBottleneck': {'conv1': {'StdConv3d': {'size': 65536}},
+                                                                                                                                                'conv2': {'StdConv3d': {'size': 442368}},
+                                                                                                                                                'conv3': {'StdConv3d': {'size': 65536}},
+                                                                                                                                                'gn1': {'GroupNorm': {'size': 2048}},
+                                                                                                                                                'gn2': {'GroupNorm': {'size': 512}},
+                                                                                                                                                'gn3': {'GroupNorm': {'size': 512}},
+                                                                                                                                                'relu': {'ReLU': {'size': 0}},
+                                                                                                                                                'size': 576512}}}},
+                                                                                           'size': 1744384}},
+                                                                   'res3': {'Sequential': {'0': {'Sequential': {'size': 9590784,
+                                                                                                                'unit01': {'PreActBottleneck': {'conv1': {'StdConv3d': {'size': 131072}},
+                                                                                                                                                'conv2': {'StdConv3d': {'size': 1769472}},
+                                                                                                                                                'conv3': {'StdConv3d': {'size': 262144}},
+                                                                                                                                                'downsample': {'StdConv3d': {'size': 524288}},
+                                                                                                                                                'gn1': {'GroupNorm': {'size': 2048}},
+                                                                                                                                                'gn2': {'GroupNorm': {'size': 1024}},
+                                                                                                                                                'gn3': {'GroupNorm': {'size': 1024}},
+                                                                                                                                                'relu': {'ReLU': {'size': 0}},
+                                                                                                                                                'size': 2691072}},
+                                                                                                                'unit02': {'PreActBottleneck': {'conv1': {'StdConv3d': {'size': 262144}},
+                                                                                                                                                'conv2': {'StdConv3d': {'size': 1769472}},
+                                                                                                                                                'conv3': {'StdConv3d': {'size': 262144}},
+                                                                                                                                                'gn1': {'GroupNorm': {'size': 4096}},
+                                                                                                                                                'gn2': {'GroupNorm': {'size': 1024}},
+                                                                                                                                                'gn3': {'GroupNorm': {'size': 1024}},
+                                                                                                                                                'relu': {'ReLU': {'size': 0}},
+                                                                                                                                                'size': 2299904}},
+                                                                                                                'unit03': {'PreActBottleneck': {'conv1': {'StdConv3d': {'size': 262144}},
+                                                                                                                                                'conv2': {'StdConv3d': {'size': 1769472}},
+                                                                                                                                                'conv3': {'StdConv3d': {'size': 262144}},
+                                                                                                                                                'gn1': {'GroupNorm': {'size': 4096}},
+                                                                                                                                                'gn2': {'GroupNorm': {'size': 1024}},
+                                                                                                                                                'gn3': {'GroupNorm': {'size': 1024}},
+                                                                                                                                                'relu': {'ReLU': {'size': 0}},
+                                                                                                                                                'size': 2299904}},
+                                                                                                                'unit04': {'PreActBottleneck': {'conv1': {'StdConv3d': {'size': 262144}},
+                                                                                                                                                'conv2': {'StdConv3d': {'size': 1769472}},
+                                                                                                                                                'conv3': {'StdConv3d': {'size': 262144}},
+                                                                                                                                                'gn1': {'GroupNorm': {'size': 4096}},
+                                                                                                                                                'gn2': {'GroupNorm': {'size': 1024}},
+                                                                                                                                                'gn3': {'GroupNorm': {'size': 1024}},
+                                                                                                                                                'relu': {'ReLU': {'size': 0}},
+                                                                                                                                                'size': 2299904}}}},
+                                                                                           'size': 9590784}},
+                                                                   'res4': {'Sequential': {'0': {'Sequential': {'size': 56692736,
+                                                                                                                'unit01': {'PreActBottleneck': {'conv1': {'StdConv3d': {'size': 524288}},
+                                                                                                                                                'conv2': {'StdConv3d': {'size': 7077888}},
+                                                                                                                                                'conv3': {'StdConv3d': {'size': 1048576}},
+                                                                                                                                                'downsample': {'StdConv3d': {'size': 2097152}},
+                                                                                                                                                'gn1': {'GroupNorm': {'size': 4096}},
+                                                                                                                                                'gn2': {'GroupNorm': {'size': 2048}},
+                                                                                                                                                'gn3': {'GroupNorm': {'size': 2048}},
+                                                                                                                                                'relu': {'ReLU': {'size': 0}},
+                                                                                                                                                'size': 10756096}},
+                                                                                                                'unit02': {'PreActBottleneck': {'conv1': {'StdConv3d': {'size': 1048576}},
+                                                                                                                                                'conv2': {'StdConv3d': {'size': 7077888}},
+                                                                                                                                                'conv3': {'StdConv3d': {'size': 1048576}},
+                                                                                                                                                'gn1': {'GroupNorm': {'size': 8192}},
+                                                                                                                                                'gn2': {'GroupNorm': {'size': 2048}},
+                                                                                                                                                'gn3': {'GroupNorm': {'size': 2048}},
+                                                                                                                                                'relu': {'ReLU': {'size': 0}},
+                                                                                                                                                'size': 9187328}},
+                                                                                                                'unit03': {'PreActBottleneck': {'conv1': {'StdConv3d': {'size': 1048576}},
+                                                                                                                                                'conv2': {'StdConv3d': {'size': 7077888}},
+                                                                                                                                                'conv3': {'StdConv3d': {'size': 1048576}},
+                                                                                                                                                'gn1': {'GroupNorm': {'size': 8192}},
+                                                                                                                                                'gn2': {'GroupNorm': {'size': 2048}},
+                                                                                                                                                'gn3': {'GroupNorm': {'size': 2048}},
+                                                                                                                                                'relu': {'ReLU': {'size': 0}},
+                                                                                                                                                'size': 9187328}},
+                                                                                                                'unit04': {'PreActBottleneck': {'conv1': {'StdConv3d': {'size': 1048576}},
+                                                                                                                                                'conv2': {'StdConv3d': {'size': 7077888}},
+                                                                                                                                                'conv3': {'StdConv3d': {'size': 1048576}},
+                                                                                                                                                'gn1': {'GroupNorm': {'size': 8192}},
+                                                                                                                                                'gn2': {'GroupNorm': {'size': 2048}},
+                                                                                                                                                'gn3': {'GroupNorm': {'size': 2048}},
+                                                                                                                                                'relu': {'ReLU': {'size': 0}},
+                                                                                                                                                'size': 9187328}},
+                                                                                                                'unit05': {'PreActBottleneck': {'conv1': {'StdConv3d': {'size': 1048576}},
+                                                                                                                                                'conv2': {'StdConv3d': {'size': 7077888}},
+                                                                                                                                                'conv3': {'StdConv3d': {'size': 1048576}},
+                                                                                                                                                'gn1': {'GroupNorm': {'size': 8192}},
+                                                                                                                                                'gn2': {'GroupNorm': {'size': 2048}},
+                                                                                                                                                'gn3': {'GroupNorm': {'size': 2048}},
+                                                                                                                                                'relu': {'ReLU': {'size': 0}},
+                                                                                                                                                'size': 9187328}},
+                                                                                                                'unit06': {'PreActBottleneck': {'conv1': {'StdConv3d': {'size': 1048576}},
+                                                                                                                                                'conv2': {'StdConv3d': {'size': 7077888}},
+                                                                                                                                                'conv3': {'StdConv3d': {'size': 1048576}},
+                                                                                                                                                'gn1': {'GroupNorm': {'size': 8192}},
+                                                                                                                                                'gn2': {'GroupNorm': {'size': 2048}},
+                                                                                                                                                'gn3': {'GroupNorm': {'size': 2048}},
+                                                                                                                                                'relu': {'ReLU': {'size': 0}},
+                                                                                                                                                'size': 9187328}}}},
+                                                                                           'size': 56692736}},
+                                                                   'size': 68291328}},
                                     'fpn_lateral1': {'Conv3d': {'size': 33280}},
-                                    'fpn_lateral2': {'Conv3d': {'size': 66048}},
-                                    'fpn_lateral3': {'Conv3d': {'size': 131584}},
-                                    'fpn_lateral4': {'Conv3d': {'size': 262656}},
+                                    'fpn_lateral2': {'Conv3d': {'size': 131584}},
+                                    'fpn_lateral3': {'Conv3d': {'size': 262656}},
+                                    'fpn_lateral4': {'Conv3d': {'size': 524800}},
                                     'fpn_output1': {'Conv3d': {'size': 1769984}},
                                     'fpn_output2': {'Conv3d': {'size': 1769984}},
                                     'fpn_output3': {'Conv3d': {'size': 1769984}},
                                     'fpn_output4': {'Conv3d': {'size': 1769984}},
-                                    'size': 143778560,
+                                    'size': 79863552,
                                     'top_block': {'LastLevelP6P7': {'p6': {'Conv3d': {'size': 1769984}},
                                                                     'p7': {'Conv3d': {'size': 1769984}},
                                                                     'size': 3539968}}}},
@@ -405,4 +440,4 @@ model buff size: 0.038MB, model param size:154.878MB
                                                'fcos_outputs': {'FCOSOutputs3D': {'loc_loss_func': {'IOULoss': {'size': 0}},
                                                                                   'size': 0}},
                                                'size': 14292536}},
-             'size': 162401052}}
+             'size': 98486044}}

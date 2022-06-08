@@ -37,7 +37,12 @@ def draw_3d_box_on_vol(data, lb):
     p = draw_box(data[:, None], lb2)
     return p / 255
 
-def draw_seg_on_vol(data, lb, if_norm=True, alpha=0.3):
+def pp_for_drawseg(data, if_norm=True):
+    if if_norm:
+        data = norm(data, 3)
+    return (data*255).cpu().to(torch.uint8).repeat(3, 1, 1)
+
+def draw_seg_on_vol(data, lb, if_norm=True, alpha=0.3, colors=["green", "red", "blue"]):
     """
     data: 1, S, H, W
     label: N, S, H, W (binary value or bool)"""
@@ -52,7 +57,7 @@ def draw_seg_on_vol(data, lb, if_norm=True, alpha=0.3):
                             (d).repeat(3, 1, 1),
                             l.bool(),
                             alpha=alpha,
-                            colors=["green", "red", "blue"] if len(l)<4 else None,
+                            colors=colors if len(l)<4 else None,
                         ))
     return torch.stack(res)/255
 

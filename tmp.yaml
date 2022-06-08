@@ -2,7 +2,7 @@ CUDNN_BENCHMARK: false
 DATALOADER:
   ASPECT_RATIO_GROUPING: true
   FILTER_EMPTY_ANNOTATIONS: true
-  FOLD: 0
+  FOLD: -1
   NUM_WORKERS: 4
   OVER_SAMPLE: 0.5
   REPEAT_THRESHOLD: 0.0
@@ -19,7 +19,7 @@ DATASETS:
 EVAL:
   BG_THRES: 0.5
   PATCH_NMS: true
-  SAVE_DIR: ./validation-raw-condinst-fullmask-inst-cpl-hip_pre2
+  SAVE_DIR: ./validation-raw-condinst-fullmask-inst-cpl-hip_pre4
   STEP_SIZE: 0.25
   USE_GAUSSIAN: false
 GLOBAL:
@@ -65,6 +65,7 @@ MODEL:
     FREEZE_AT: 2
     FREEZE_TILL: 300
     NAME: build_fcos_res3d_fpn_backbone
+    PRETRAIN: false
     RESNET: video
   BASIS_MODULE:
     ANN_SET: coco
@@ -588,10 +589,10 @@ MODEL:
     - res2
     - res3
     - res4
-    PRETRAIN: true
+    PRETRAIN_WAYS: rotate
     STAGE_NUM: 5
-  WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl-hip_pre2/model_final.pth
-OUTPUT_DIR: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl-hip_pre2
+  WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl-hip_pre4/model_final.pth
+OUTPUT_DIR: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl-hip_pre10
 SEED: -1
 SOLVER:
   AMP:
