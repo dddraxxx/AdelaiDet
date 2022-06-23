@@ -1,0 +1,129 @@
+OUTPUT_DIR: training_dir/BoxInst/UNet3D-BoxInst_10_0.96 #_area
+CUDNN_BENCHMARK: false
+MODEL:
+  # WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-BoxInst_10/model_0000699.pth
+  # WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-BoxInst_10_1/model_0006299.pth
+  # WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-BoxInst_5_0.92/model_0000099.pth
+  # WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_5_0.88/model_0002099.pth
+  # WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-BoxInst_5_0.92/model_0000499.pth
+  # WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-BoxInst_5_0.8/model_0009499.pth
+  # WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_5_0.96_2dprj/model_0000199.pth
+  # WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_100_0.96/model_0000149.pth
+  # WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_100_0.96_area/model_0000049.pth
+  # WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_240_0.96_area/model_0004999.pth
+  # WEIGHTS: training_dir/BoxInst/UNet3D-BoxInst_10_0.96_area/model_0004999.pth
+
+
+  BACKBONE:
+    ANTI_ALIAS: false
+    FREEZE_AT: 2
+    NAME: build_fcos_unet_fpn_backbone
+  BOXINST:
+    BOTTOM_PIXELS_REMOVED: 0
+    ENABLED: true
+    PAIRWISE:
+      COLOR_THRESH: 0.94
+      DILATION: 1
+      SIZE: 3
+      WARMUP_ITERS: 800
+    AREA_LOSS:
+      THRESH: 0 #0.4
+      WEIGHT: 0.4
+      BETA: 6
+      DOWN_ITER: 400
+  CONDINST:
+    BOTTOM_PIXELS_REMOVED: -1
+    MASK_BRANCH:
+      CHANNELS: 64 # 128
+      IN_FEATURES: [p2, p3, p4]
+      NORM: BN
+      NUM_CONVS: 4
+      OUT_CHANNELS: 8 # 16
+      SEMANTIC_LOSS_ON: false
+    MASK_HEAD:
+      CHANNELS: 8
+      DISABLE_REL_COORDS: false
+      NUM_LAYERS: 3
+      USE_FP16: false
+    MASK_OUT_STRIDE: 4
+    MAX_PROPOSALS: -1
+    TOPK_PROPOSALS_PER_IM: 32
+  FPN:
+    FUSE_TYPE: sum
+    IN_FEATURES: [res2, res3, res4]
+    NORM: ""
+    OUT_CHANNELS: 64 # 128
+    LATERAL_LAYERS: 1
+  FCOS:
+    BOX_QUALITY: ctrness
+    CENTER_SAMPLE: true
+    FPN_STRIDES: [4, 8, 16, 32, 64]
+    INFERENCE_TH_TEST: 0.3
+    INFERENCE_TH_TRAIN: 0.05
+    IN_FEATURES: [p2, p3, p4, p5, p6]
+    LOC_LOSS_TYPE: giou
+    ## 0.25, 2
+    LOSS_ALPHA: 0.5
+    LOSS_GAMMA: 4.0 # Modified to make cls and loc loss decrease simultaneously
+    LOSS_NORMALIZER_CLS: fg
+    LOSS_WEIGHT_CLS: 1.0
+    NMS_TH: 0.6
+    NORM: GN
+    NUM_CLASSES: 1
+    NUM_CLS_CONVS: 4
+    NUM_SHARE_CONVS: 0
+    POST_NMS_TOPK_TEST: 100
+    POST_NMS_TOPK_TRAIN: 100
+    POS_RADIUS: 1.5
+    PRE_NMS_TOPK_TEST: 1000
+    PRE_NMS_TOPK_TRAIN: 1000
+    PRIOR_PROB: 0.01
+    SIZES_OF_INTEREST: [16, 32, 64, 128]
+    THRESH_WITH_CTR: false
+    TOP_LEVELS: 2
+    USE_DEFORMABLE: false
+    USE_RELU: true
+    USE_SCALE: true
+    YIELD_BOX_FEATURES: false
+    YIELD_PROPOSAL: false
+  MASK_ON: true
+  META_ARCHITECTURE: UInst3D
+  PIXEL_MEAN: [None]
+  PROPOSAL_GENERATOR:
+    MIN_SIZE: 0
+    NAME: FCOS3D
+  UINST3D:
+    NORMALIZE: false
+  UNETD:
+    BASE_CHANNELS: 16
+    MAX_CHANNELS: 320
+    OUT_FEATURES: [res2, res3, res4]
+    STAGE_NUM: 5
+SOLVER:
+  AMP:
+    ENABLED: false
+  BASE_LR: 0.001
+  IMS_PER_BATCH: 2
+  BIAS_LR_FACTOR: 1.0
+  MOMENTUM: 0.9
+  NESTEROV: false
+  WEIGHT_DECAY: 0.0001
+  WEIGHT_DECAY_BIAS: null
+  WEIGHT_DECAY_NORM: 0.0
+  CHECKPOINT_PERIOD: 1000
+  CLIP_GRADIENTS:
+    CLIP_TYPE: value
+    CLIP_VALUE: 1.0
+    ENABLED: false
+    NORM_TYPE: 2.0
+  GAMMA: 0.1
+  LR_SCHEDULER_NAME: WarmupMultiStepLR
+  MAX_ITER: 5000
+  REFERENCE_WORLD_SIZE: 0
+  STEPS: [500, 1200]
+  WARMUP_FACTOR: 0.001 # times base_lr in beginning
+  WARMUP_ITERS: 300
+  WARMUP_METHOD: linear
+VERSION: 2
+VIS_PERIOD: 0
+SEED: -1

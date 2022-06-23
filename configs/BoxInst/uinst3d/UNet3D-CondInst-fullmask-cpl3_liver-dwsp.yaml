@@ -1,0 +1,146 @@
+OUTPUT_DIR: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl-liver-dwsp1
+CUDNN_BENCHMARK: false
+DATALOADER:
+  TYPE: nnunet
+  TASK: 029
+  OVER_SAMPLE: 0.5
+  PLANS: uinst # different data source
+  FOLD: -1
+  CUTHALF: false
+EVAL:
+  SAVE_DIR: ./validation-raw-condinst-fullmask-inst-cpl-liver-dwsp1
+  PATCH_NMS: true
+  BG_THRES: 0.5 # when applied to patch_nms: compared with sigmoid, when not: compared with avg masks
+  STEP_SIZE: 0.25 # need to keep whole instance in a patch
+  PADDINGS: 0 # pixels to pad in 
+  USE_GAUSSIAN: false
+VAL:
+  ENABLED: true
+  BATCH_NUM: 100
+  PERIOD: 100
+MODEL:
+  # WEIGHTS: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask2/model_0049999.pth
+  # WEIGHTS: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst2/model_0034999.pth
+  # WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl/model_0069999.pth
+  # WEIGHTS: /home/hynx/AdelaiDet/training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl2/model_0032599.pth
+  # WEIGHTS: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl-liver-dwsp/model_0021599.pth
+  WEIGHTS: training_dir/BoxInst/UNet3D-CondInst-nnunet-fullmask-inst-cpl-liver-dwsp/model_0124999.pth
+  BACKBONE:
+    ANTI_ALIAS: false
+    FREEZE_AT: 2
+    NAME: build_fcos_unet_fpn_backbone
+  UINST3D:
+    NORMALIZE: false
+  UNETD:
+    BASE_CHANNELS: 32
+    MAX_CHANNELS: 320
+    OUT_FEATURES: [res0, res1, res2, res3, res4]
+    STAGE_NUM: 5
+  FPN:
+    FUSE_TYPE: sum
+    IN_FEATURES:  [res0, res1, res2, res3, res4]
+    NORM: ""
+    OUT_CHANNELS: 128
+    LATERAL_LAYERS: 1
+  BOXINST:
+    BOTTOM_PIXELS_REMOVED: 0
+    ENABLED: false
+    PAIRWISE:
+      COLOR_THRESH: 1.1 #0.96
+      DILATION: 1
+      SIZE: 3
+      WARMUP_ITERS: 10000 # 300
+    AREA_LOSS:
+      THRESH: 0.6
+      WEIGHT: 0
+      BETA: 4
+      DOWN_ITER: 12000
+  CONDINST:
+    ONLY_SEG: false
+    BOTTOM_PIXELS_REMOVED: -1
+    MASK_BRANCH:
+      CHANNELS: 32 # 128
+      IN_FEATURES: [p0, p1, p2, p3, p4]
+      NORM: BN
+      NUM_CONVS: 1
+      UP_CONVS: 0
+      OUT_CHANNELS: 8 # 16
+      SEMANTIC_LOSS_ON: false
+    MASK_HEAD:
+      CHANNELS: 8
+      UPSAMPLE_FACTOR: 1
+      DISABLE_REL_COORDS: false
+      NUM_LAYERS: 3
+      USE_FP16: false
+    MASK_OUT_STRIDE: 1
+    MAX_PROPOSALS: -1
+    TOPK_PROPOSALS_PER_IM: 9
+  FCOS:
+    COMPLETE_INST: true
+    CPLNESS_THRES: 0.5
+    # seems like an important change
+    BOX_QUALITY: iou
+    CENTER_SAMPLE: true
+    FPN_STRIDES: [4, 8, 16, 32, 64]
+    INFERENCE_TH_TEST: 0.5
+    INFERENCE_TH_TRAIN: 0.05
+    IN_FEATURES: [p2, p3, p4, p5, p6]
+    LOC_LOSS_TYPE: giou
+    ## 0.25, 2
+    LOSS_ALPHA: 0.5
+    LOSS_GAMMA: 3.0 # Modified to make cls and loc loss decrease simultaneously
+    LOSS_NORMALIZER_CLS: fg
+    LOSS_WEIGHT_CLS: 1.0
+    NMS_TH: 0.1 # 0.6 the best
+    NORM: GN
+    NUM_CLASSES: 1
+    NUM_CLS_CONVS: 4
+    NUM_SHARE_CONVS: 0
+    POST_NMS_TOPK_TEST: 4 # 6 the best
+    POST_NMS_TOPK_TRAIN: 100
+    POS_RADIUS: 1.5
+    PRE_NMS_TOPK_TEST: 24
+    PRE_NMS_TOPK_TRAIN: 1000
+    PRIOR_PROB: 0.01
+    SIZES_OF_INTEREST: [16, 32, 64, 128] # [8, 16, 32, 64]
+    THRESH_WITH_CTR:  false # ?
+    TOP_LEVELS: 2
+    USE_DEFORMABLE: false
+    USE_RELU: true
+    USE_SCALE: true
+    YIELD_BOX_FEATURES: false
+    YIELD_PROPOSAL: false
+  # MASK_ON: true
+  META_ARCHITECTURE: UInst3D
+  PIXEL_MEAN: [None]
+  PROPOSAL_GENERATOR:
+    # MIN_SIZE: 0
+    NAME: FCOS3D
+SOLVER:
+  AMP:
+    ENABLED: false
+  BASE_LR: 0.001
+  IMS_PER_BATCH: 2
+  BIAS_LR_FACTOR: 1.0
+  MOMENTUM: 0.9
+  NESTEROV: false
+  WEIGHT_DECAY: 0.0001
+  WEIGHT_DECAY_BIAS: null
+  WEIGHT_DECAY_NORM: 0.0
+  CHECKPOINT_PERIOD: 500
+  CLIP_GRADIENTS:
+    CLIP_TYPE: value
+    CLIP_VALUE: 1.0
+    ENABLED: false
+    NORM_TYPE: 2.0
+  GAMMA: 0.3
+  LR_SCHEDULER_NAME: WarmupMultiStepLR
+  MAX_ITER: 125000
+  REFERENCE_WORLD_SIZE: 0
+  STEPS: [2000, 12000, 32000, 62000, 102000]
+  WARMUP_FACTOR: 0.001 # times base_lr in beginning
+  WARMUP_ITERS: 800
+  WARMUP_METHOD: linear
+VERSION: 2
+VIS_PERIOD: 0
+SEED: -1

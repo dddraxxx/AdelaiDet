@@ -5,6 +5,7 @@ inference_test_output
 training_dir
 
 *.nii.gz
+*.npz
 *.jpg
 *.png
 *.txt

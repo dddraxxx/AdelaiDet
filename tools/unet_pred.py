@@ -1,4 +1,8 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+from gpu_stat import get_free_gpu
+import os
+os.environ['CUDA_VISIBLE_DEVICES']=  str(get_free_gpu())
+# print(os.environ['CUDA_VISIBLE_DEVICES'])
+
 import argparse
 from functools import partial, reduce
 import glob
@@ -30,9 +34,6 @@ from adet.utils.visualize_niigz import (
     draw_3d_box_on_vol,
 )
 
-from gpu_stat import get_free_gpu
-import os
-os.environ['CUDA_VISIBLE_DEVICES']= str(get_free_gpu())
 
 def setup_cfg_3d(args):
     cfg = CfgNode()
@@ -145,13 +146,19 @@ def model_pred(x, model, bg_thres=0.5):
 
 from batchgenerators.augmentations.utils import pad_nd_image
 from detectron2.structures import Instances, Boxes
-def predict_3d(data, model, network, step_size, pad_border_mode='constant',pad_kwargs={'constant_values': 0}, use_gaussian=False, verbose=True, all_in_gpu=True, **kwargs):
+def predict_3d(data, model, network, step_size, pad_border_mode='constant',pad_kwargs={'constant_values': 0}, use_gaussian=False, verbose=True, all_in_gpu=True, paddings=0, **kwargs):
     '''
     do_mirror unsupported
     data: 1, H, W, S'''
     assert use_gaussian==False
     assert all_in_gpu
     assert len(data.shape) == 4, "x must be (c, x, y, z)"
+
+    # pad_kwargs['constant_values']=data.min()
+
+    if paddings>0:
+        data = pad_nd_image(data, [p + paddings for p in data.shape[-3:]], pad_border_mode, pad_kwargs, False, None)
+    original_slice = tuple(slice(paddings, p-paddings) for p in data.shape[-3:])
 
     patch_size = (128,128,128)
     data, slicer = pad_nd_image(data, patch_size, pad_border_mode, pad_kwargs, True, None)
@@ -224,6 +231,8 @@ def predict_3d(data, model, network, step_size, pad_border_mode='constant',pad_k
         predicted_segmentation = (aggregated_results.argmax(dim=0)).detach().cpu().numpy()
         print('from neural_network, cls:', np.unique(predicted_segmentation, return_counts=True))
     if verbose: print("prediction done")
+
+    aggregated_results = aggregated_results[(...,) + original_slice]    
     return None, aggregated_results.detach().cpu().numpy()
 
 if __name__ == "__main__":
@@ -247,7 +256,7 @@ if __name__ == "__main__":
         trainer.network.ffbg_thres = bg_t
         trainer.network.cuthalf= cfg.EVAL.get('CUTHALF') or False
         if cfg.EVAL.PATCH_NMS:
-            ppdrss = partial(predict_3d, model = model, network = trainer.network)
+            ppdrss = partial(predict_3d, model = model, network = trainer.network, paddings = cfg.EVAL.get('PADDINGS', 0))
             trainer.predict_preprocessed_data_return_seg_and_softmax = ppdrss
         else:
             trainer.network.forward = partial(model_pred, model=model, bg_thres = bg_t)
