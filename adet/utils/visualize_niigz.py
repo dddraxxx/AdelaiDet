@@ -32,7 +32,7 @@ def draw_3d_box_on_vol(data, lb):
     lb = lb.int()
     lb2 = lb[:, [1, 2, 4, 5]].repeat(data.size(0), 1)
     lb2[: lb[0, 0]] = 0
-    lb2[lb[0, 3] :] = 0
+    lb2[lb[0, 3]+1 :] = 0
     # p = draw_box(data[lb[0, 0] : lb[0, 3], None], lb2[lb[0, 0] : lb[0, 3]])
     p = draw_box(data[:, None], lb2)
     return p / 255
@@ -62,7 +62,7 @@ def draw_seg_on_vol(data, lb, if_norm=True, alpha=0.3, colors=["green", "red", "
     return torch.stack(res)/255
 
 
-def visulize_3d(data, width=5, inter_dst=10, save_name=None):
+def visulize_3d(data, width=5, inter_dst=5, save_name=None):
     """
     data: (S, H, W) or (N, C, H, W)"""
     data =tt(data)
@@ -75,11 +75,12 @@ def visulize_3d(data, width=5, inter_dst=10, save_name=None):
     if img.dim() < 4:
         img = img[:, None]
     img = img[::inter_dst]
-    print("Visualizing img with shape and type:", img.shape, img.dtype)
+    print("Visualizing img with shape and type:", img.shape, img.dtype, "on path {}".format(save_name) if save_name else "")
 
     img_f = make_grid(img, nrow=width, padding=5, pad_value=1, normalize=True)
     if save_name:
         save_image(img_f, save_name)
+        return range(0, img.shape[0], inter_dst)
     else:
         return img_f
 
